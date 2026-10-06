@@ -35,3 +35,9 @@ export function formatDateTimeUtc(input: number | string): string {
   const iso = new Date(input).toISOString();
   return `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
 }
+
+/** "01-15 10:05" — compact UTC timestamp for dense tables. */
+export function formatShortDateTimeUtc(input: number | string): string {
+  const iso = new Date(input).toISOString();
+  return `${iso.slice(5, 10)} ${iso.slice(11, 16)}`;
+}

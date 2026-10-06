@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { CandleChartView } from '../components/CandleChartView';
+import { BottomPanel } from '../components/BottomPanel';
 import { ReplayControls } from '../components/ReplayControls';
 import { TradingPanel } from '../components/TradingPanel';
 import { ErrorBanner } from '../components/ui/ErrorBanner';
@@ -81,6 +82,7 @@ export function ReplayPage({ session, onExit }: Props) {
         onReset={() => session.reset()}
         onSpeedChange={(speed) => session.setSpeed(speed)}
       />
+      <BottomPanel snapshot={snapshot} instrument={instrument} />
     </div>
   );
 }
