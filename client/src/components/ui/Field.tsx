@@ -21,4 +21,4 @@ export function Field({ label, htmlFor, hint, error, children }: Props) {
 }
 
 export const inputClass =
-  'w-full rounded-md border border-terminal-border bg-terminal-bg px-3 py-2 font-mono text-sm text-terminal-text outline-none transition focus:border-gold disabled:opacity-50';
+  'w-full rounded-md border border-terminal-strong bg-terminal-bg px-3 py-2 font-mono text-sm text-terminal-text outline-none transition focus:border-accent disabled:opacity-50';

@@ -18,6 +18,8 @@ import { useReplaySnapshot } from '../hooks/useReplaySession';
 import type { ReplaySession } from '../store/replaySession';
 import { SAME_CANDLE_RULE_LABELS } from '../trading/types';
 import { INSTRUMENTS } from '../types/market';
+import { TimeZoneContext } from '../hooks/useTimeZone';
+import { TIME_ZONES } from '../utils/timezone';
 
 type Dialog = 'help' | 'confirmReset' | 'confirmExit' | 'jump' | null;
 
@@ -86,20 +88,24 @@ export function ReplayPage({ session, onExit, onJump, jumping, jumpError, onDism
   );
 
   return (
+    <TimeZoneContext.Provider value={setup.timeZone}>
     <div className="flex min-h-full flex-col lg:h-full">
       <header className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-terminal-border bg-terminal-panel px-4 py-2">
-        <span className="font-semibold text-gold">BACKTRACK</span>
+        <span className="font-bold tracking-wide text-terminal-text">BACK<span className="text-accent">TRACK</span></span>
         <span className="font-mono text-sm">
           {instrument.displayName} · {setup.granularity}
         </span>
         <span
-          className="rounded border border-gold/40 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-gold"
+          className="rounded border border-warn/50 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-warn"
           title="Historical replay only. No orders are sent to any broker or data provider."
         >
           Simulation
         </span>
         <span className="text-xs text-terminal-muted" title="Applied when one candle touches both SL and TP">
           Same-candle rule: <span className="text-terminal-text">{SAME_CANDLE_RULE_LABELS[setup.sameCandleRule]}</span>
+        </span>
+        <span className="text-xs text-terminal-muted" title="All times are shown in this time zone">
+          Time zone: <span className="text-terminal-text">{TIME_ZONES.find((z) => z.id === setup.timeZone)?.label ?? setup.timeZone}</span>
         </span>
         <div className="ml-auto flex items-center gap-1">
           <Button variant="ghost" onClick={() => setDialog('jump')} disabled={jumping}>
@@ -131,6 +137,7 @@ export function ReplayPage({ session, onExit, onJump, jumping, jumpError, onDism
           <CandleChartView
             candles={snapshot.visibleCandles}
             pricePrecision={instrument.pricePrecision}
+            timeZone={setup.timeZone}
             priceLines={priceLines}
             markers={markers}
             focusKey={snapshot.runId}
@@ -159,6 +166,7 @@ export function ReplayPage({ session, onExit, onJump, jumping, jumpError, onDism
       {dialog === 'jump' && (
         <JumpToDate
           initialMs={setup.startMs}
+          timeZone={setup.timeZone}
           hasOpenTrades={hasOpenTrades}
           onClose={closeDialog}
           onJump={(ms) => {
@@ -211,5 +219,6 @@ export function ReplayPage({ session, onExit, onJump, jumping, jumpError, onDism
         </Modal>
       )}
     </div>
+    </TimeZoneContext.Provider>
   );
 }

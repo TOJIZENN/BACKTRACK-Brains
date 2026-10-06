@@ -16,6 +16,7 @@ import {
   type SetupFormErrors,
   type SetupFormValues,
 } from '../utils/setupForm';
+import { TIME_ZONES, timeZoneShort } from '../utils/timezone';
 
 interface Props {
   onStart: (setup: SessionSetup) => void;
@@ -47,6 +48,8 @@ export function SetupPage({ onStart, loading, error, onDismissError }: Props) {
     return () => controller.abort();
   }, []);
 
+  const zone = timeZoneShort(values.timeZone);
+
   const update = <K extends keyof SetupFormValues>(key: K, value: SetupFormValues[K]) =>
     setValues((prev) => ({ ...prev, [key]: value }));
 
@@ -67,7 +70,7 @@ export function SetupPage({ onStart, loading, error, onDismissError }: Props) {
       <form onSubmit={submit} noValidate className="w-full max-w-lg rounded-xl border border-terminal-border bg-terminal-panel p-5 shadow-2xl sm:p-8">
         <div className="mb-6">
           <h1 className="text-xl font-semibold">
-            <span className="text-gold">BACKTRACK</span> · Replay setup
+            <span className="font-bold tracking-wide">BACK<span className="text-accent">TRACK</span></span> · Replay setup
           </h1>
           <p className="mt-1 text-sm text-terminal-muted">
             Manual historical replay. Simulation only — no live orders are ever placed.
@@ -105,7 +108,7 @@ export function SetupPage({ onStart, loading, error, onDismissError }: Props) {
                   role="radio"
                   aria-checked={values.granularity === g}
                   onClick={() => update('granularity', g)}
-                  className={`rounded py-1 font-mono text-sm ${values.granularity === g ? 'bg-gold text-terminal-bg font-semibold' : 'text-terminal-muted hover:text-terminal-text'}`}
+                  className={`rounded py-1 font-mono text-sm ${values.granularity === g ? 'bg-accent text-white font-semibold' : 'text-terminal-muted hover:text-terminal-text'}`}
                 >
                   {g}
                 </button>
@@ -113,19 +116,31 @@ export function SetupPage({ onStart, loading, error, onDismissError }: Props) {
             </div>
           </Field>
 
-          <Field label="Date (UTC)" htmlFor="date" error={errors.date}>
+          <Field label={`Date (${zone})`} htmlFor="date" error={errors.date}>
             <input id="date" type="date" className={inputClass} value={values.date} onChange={(e) => update('date', e.target.value)} />
           </Field>
 
-          <Field label="Start time (UTC)" htmlFor="time" error={errors.time}>
+          <Field label={`Start time (${zone})`} htmlFor="time" error={errors.time}>
             <input id="time" type="time" className={inputClass} value={values.time} onChange={(e) => update('time', e.target.value)} />
           </Field>
+
+          <div className="sm:col-span-2">
+            <Field label="Time zone" htmlFor="timezone" hint="Times on the chart, in the journal and in this form use this zone.">
+              <select id="timezone" className={inputClass} value={values.timeZone} onChange={(e) => update('timeZone', e.target.value)}>
+                {TIME_ZONES.map((z) => (
+                  <option key={z.id} value={z.id}>
+                    {z.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
 
           <div className="-mt-2 sm:col-span-2">
             <button
               type="button"
-              className="text-xs text-terminal-muted underline-offset-2 hover:text-gold hover:underline"
-              onClick={() => setValues((prev) => ({ ...prev, ...randomStart() }))}
+              className="text-xs text-terminal-muted underline-offset-2 hover:text-accent hover:underline"
+              onClick={() => setValues((prev) => ({ ...prev, ...randomStart(Date.now(), prev.timeZone) }))}
             >
               🎲 Pick a random date &amp; time
             </button>

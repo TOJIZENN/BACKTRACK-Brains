@@ -1,13 +1,15 @@
 import type { Granularity } from '../types/market';
 import type { SessionSetup } from '../types/session';
 import type { SameCandleRule } from '../trading/types';
+import { DEFAULT_TIME_ZONE, isKnownTimeZone, toWallClock, zonedToUtcMs } from './timezone';
 
 export const MIN_RISK_PERCENT = 0.01;
 export const MAX_RISK_PERCENT = 10;
 const DAY_MS = 86_400_000;
-const STORAGE_KEY = 'backtrack.setup.v1';
+// v2: date/time became zone-relative (default IST); older saved UTC values are not reused.
+const STORAGE_KEY = 'backtrack.setup.v2';
 
-/** Raw form values (strings straight from inputs). Date/time are UTC. */
+/** Raw form values (strings straight from inputs). Date/time are wall-clock in `timeZone`. */
 export interface SetupFormValues {
   instrument: string;
   granularity: Granularity;
@@ -16,38 +18,54 @@ export interface SetupFormValues {
   startingBalance: string;
   riskPercent: string;
   sameCandleRule: SameCandleRule;
+  timeZone: string;
 }
 
 export type SetupFormErrors = Partial<Record<keyof SetupFormValues, string>>;
 
+/** London open (08:00 UTC) expressed in IST, a sensible first replay. */
+const DEFAULT_START_TIME = '13:30';
+
 /** A recent weekday at the London open, a sensible first replay. */
-export function defaultSetupValues(nowMs: number = Date.now()): SetupFormValues {
-  let day = new Date(nowMs - 7 * DAY_MS);
-  while (day.getUTCDay() === 0 || day.getUTCDay() === 6) day = new Date(day.getTime() - DAY_MS);
+export function defaultSetupValues(nowMs: number = Date.now(), timeZone: string = DEFAULT_TIME_ZONE): SetupFormValues {
+  let dayMs = nowMs - 7 * DAY_MS;
+  while ([0, 6].includes(toWallClock(dayMs, timeZone).weekday)) dayMs -= DAY_MS;
   return {
     instrument: 'XAU_USD',
     granularity: 'M5',
-    date: day.toISOString().slice(0, 10),
-    time: '08:00',
+    date: toWallClock(dayMs, timeZone).date,
+    time: DEFAULT_START_TIME,
     startingBalance: '10000',
     riskPercent: '1',
     sameCandleRule: 'SL_FIRST',
+    timeZone,
   };
 }
 
-/** Random weekday within the last year, during active hours. */
-export function randomStart(nowMs: number = Date.now(), random: () => number = Math.random): { date: string; time: string } {
-  let day: Date;
-  do {
-    day = new Date(nowMs - (2 + Math.floor(random() * 365)) * DAY_MS);
-  } while (day.getUTCDay() === 0 || day.getUTCDay() === 6);
-  const hour = 1 + Math.floor(random() * 19);
-  const minute = Math.floor(random() * 12) * 5;
-  return { date: day.toISOString().slice(0, 10), time: `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}` };
+/** Local hours for random starts. 08:00–17:00 on a weekday is inside gold's trading week in every listed zone. */
+const RANDOM_START_FIRST_HOUR = 8;
+const RANDOM_START_HOURS = 9;
+
+/** Random weekday within the last year, at a daytime hour in the chosen zone. */
+export function randomStart(
+  nowMs: number = Date.now(),
+  timeZone: string = DEFAULT_TIME_ZONE,
+  random: () => number = Math.random,
+): { date: string; time: string } {
+  const today = toWallClock(nowMs, timeZone).date;
+  let dayMs = Date.parse(`${today}T00:00:00Z`) - (2 + Math.floor(random() * 365)) * DAY_MS;
+  // Calendar weekday doesn't depend on the zone. Move a weekend pick back to the Friday (no retry loop).
+  const weekday = new Date(dayMs).getUTCDay();
+  if (weekday === 6) dayMs -= DAY_MS;
+  if (weekday === 0) dayMs -= 2 * DAY_MS;
+  const minute = Math.floor(random() * RANDOM_START_HOURS * 12) * 5;
+  const hour = RANDOM_START_FIRST_HOUR + Math.floor(minute / 60);
+  const time = `${String(hour).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
+  return { date: new Date(dayMs).toISOString().slice(0, 10), time };
 }
 
-export function startMsFrom(date: string, time: string): number {
-  return Date.parse(`${date}T${time}:00Z`);
+export function startMsFrom(date: string, time: string, timeZone: string = DEFAULT_TIME_ZONE): number {
+  return zonedToUtcMs(date, time, timeZone);
 }
 
 export function validateSetup(
@@ -55,7 +73,7 @@ export function validateSetup(
   nowMs: number = Date.now(),
 ): { setup: SessionSetup; errors: null } | { setup: null; errors: SetupFormErrors } {
   const errors: SetupFormErrors = {};
-  const startMs = startMsFrom(values.date, values.time);
+  const startMs = startMsFrom(values.date, values.time, values.timeZone);
   const balance = Number(values.startingBalance);
   const risk = Number(values.riskPercent);
 
@@ -78,6 +96,7 @@ export function validateSetup(
       startingBalance: balance,
       riskPercent: risk,
       sameCandleRule: values.sameCandleRule,
+      timeZone: values.timeZone,
     },
   };
 }
@@ -85,7 +104,10 @@ export function validateSetup(
 export function loadSavedSetup(): SetupFormValues | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? { ...defaultSetupValues(), ...(JSON.parse(raw) as Partial<SetupFormValues>) } : null;
+    if (!raw) return null;
+    const saved = { ...defaultSetupValues(), ...(JSON.parse(raw) as Partial<SetupFormValues>) };
+    if (!isKnownTimeZone(saved.timeZone)) saved.timeZone = DEFAULT_TIME_ZONE;
+    return saved;
   } catch {
     return null;
   }

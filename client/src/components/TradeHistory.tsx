@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { tradeResult } from '../trading/pnl';
 import type { ExitReason, Trade } from '../trading/types';
 import type { InstrumentSpec } from '../types/market';
-import { formatPrice, formatR, formatSignedMoney, formatShortDateTimeUtc } from '../utils/format';
+import { useTimeZone } from '../hooks/useTimeZone';
+import { formatPrice, formatR, formatShortDateTime, formatSignedMoney } from '../utils/format';
+import { timeZoneShort } from '../utils/timezone';
 
 type SortKey = 'number' | 'date' | 'result' | 'pnl';
 type SortDir = 'asc' | 'desc';
@@ -37,6 +39,7 @@ interface Props {
 }
 
 export function TradeHistory({ trades, instrument }: Props) {
+  const timeZone = useTimeZone();
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: 'number', dir: 'desc' });
   const sorted = [...trades].sort((a, b) => compare(a, b, sort.key) * (sort.dir === 'asc' ? 1 : -1));
   const price = (v: number | null) => (v === null ? '—' : formatPrice(v, instrument.pricePrecision));
@@ -48,7 +51,7 @@ export function TradeHistory({ trades, instrument }: Props) {
       <th className={`px-1.5 py-1.5 font-medium ${align}`} aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
         <button
           type="button"
-          className={`hover:text-terminal-text ${active ? 'text-gold' : ''}`}
+          className={`hover:text-terminal-text ${active ? 'text-accent' : ''}`}
           onClick={() => setSort((prev) => ({ key, dir: prev.key === key && prev.dir === 'desc' ? 'asc' : 'desc' }))}
         >
           {label}
@@ -71,7 +74,7 @@ export function TradeHistory({ trades, instrument }: Props) {
       <thead className="sticky top-0 bg-terminal-panel text-terminal-muted">
         <tr>
           {header('#', 'number')}
-          {header('Date (UTC)', 'date')}
+          {header(`Date (${timeZoneShort(timeZone)})`, 'date')}
           {header('Side')}
           {header('Entry', undefined, 'text-right')}
           {header('Exit', undefined, 'text-right')}
@@ -90,7 +93,7 @@ export function TradeHistory({ trades, instrument }: Props) {
           return (
             <tr key={t.id} className="border-t border-terminal-border/60 hover:bg-terminal-raised/60">
               <td className="px-1.5 py-1.5">{t.number}</td>
-              <td className="px-1.5 py-1.5 whitespace-nowrap">{formatShortDateTimeUtc(t.entryTime)}</td>
+              <td className="px-1.5 py-1.5 whitespace-nowrap">{formatShortDateTime(t.entryTime, timeZone)}</td>
               <td className={`px-1.5 py-1.5 font-semibold ${t.side === 'LONG' ? 'text-bull' : 'text-bear'}`}>{t.side === 'LONG' ? 'BUY' : 'SELL'}</td>
               <td className="px-1.5 py-1.5 text-right">{price(t.entryPrice)}</td>
               <td className="px-1.5 py-1.5 text-right">{price(t.exitPrice)}</td>
@@ -102,7 +105,7 @@ export function TradeHistory({ trades, instrument }: Props) {
               <td className="px-1.5 py-1.5 font-sans text-terminal-muted">
                 <span className="whitespace-nowrap">{t.exitReason ? EXIT_REASON_LABELS[t.exitReason] : '—'}</span>
                 {t.ambiguousExit && (
-                  <span className="ml-1 text-gold" title="SL and TP were both touched in this candle; the same-candle rule decided the exit.">
+                  <span className="ml-1 text-warn" title="SL and TP were both touched in this candle; the same-candle rule decided the exit.">
                     ⚠
                   </span>
                 )}

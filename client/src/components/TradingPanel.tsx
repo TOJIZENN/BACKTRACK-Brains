@@ -89,7 +89,7 @@ export function TradingPanel({ snapshot, ticket, instrument, onClosePosition }: 
             {showNumbers ? `1:${preview.riskRewardRatio.toFixed(2)}` : '—'}
           </dd>
         </dl>
-        {impliedSide && preview.error && <p className="mt-2 text-xs text-gold">{preview.error}</p>}
+        {impliedSide && preview.error && <p className="mt-2 text-xs text-warn">{preview.error}</p>}
 
         <div className="mt-3 grid grid-cols-2 gap-2">
           <Button
@@ -111,7 +111,7 @@ export function TradingPanel({ snapshot, ticket, instrument, onClosePosition }: 
             SELL
           </Button>
         </div>
-        {!canTrade && <p className="mt-2 text-xs text-gold">Reviewing past candles — step forward to the latest candle to trade.</p>}
+        {!canTrade && <p className="mt-2 text-xs text-warn">Reviewing past candles — step forward to the latest candle to trade.</p>}
         {error && (
           <div className="mt-3">
             <ErrorBanner title="Order rejected" message={error} onDismiss={() => ticket.setError(null)} />

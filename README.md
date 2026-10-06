@@ -17,7 +17,8 @@ It is **not** an automated strategy tester: every trading decision is made by yo
 ## Features
 
 - XAU/USD on **M1, M5 (default), M15, H1**, loaded from **Twelve Data** (default) or OANDA, switchable with one env variable
-- Replay setup screen: timeframe, date, start time (UTC), starting balance, risk %, same-candle rule,
+- Replay setup screen: timeframe, date, start time, **time zone (default Kolkata, IST UTC+05:30)**,
+  starting balance, risk %, same-candle rule,
   plus a "random date" button
 - Strict **no-lookahead** replay: only closed candles up to the replay point are ever rendered
 - Controls: Play / Pause, Next, Previous, Reset, speed 0.5x / 1x / 2x / 5x / 10x, Jump to date
@@ -30,6 +31,7 @@ It is **not** an automated strategy tester: every trading decision is made by yo
 - Sortable trade history (by number, date, result, P&L) and an equity curve
 - Keyboard shortcuts, toasts for opened/closed trades, clear error messages
 - TradingView **Lightweight Charts** with zoom, pan, crosshair and auto-scaling, and no indicators by design
+- TradingView dark colour theme (`#131722` background, `#089981` / `#f23645` candles, `#2962ff` accent)
 
 ## Architecture
 
@@ -198,6 +200,19 @@ Or run both together with `npm run dev`, then open http://localhost:5173.
 
 Other scripts (root): `npm test`, `npm run lint`, `npm run typecheck`, `npm run build`.
 
+## Time Zone
+
+Times default to **Asia/Kolkata (IST, UTC+05:30)**. You can pick another zone on the setup screen:
+UTC, London, New York, Dubai, Singapore or Tokyo. The zone applies to:
+
+- the date/time you enter on the setup screen and in *Jump to date*
+- the chart's time axis and crosshair label
+- the current-candle clock, trade history, equity-curve tooltips and messages
+
+Only display and input change. Requests to the server, the candle cache and all trade data stay in UTC,
+so switching zones never changes which candles you get. For example, a 15:30 IST start is the same replay
+as a 10:00 UTC start. Zones with daylight saving are handled per timestamp. IST has none.
+
 ## Replay Engine Explanation
 
 `client/src/replay/replayEngine.ts` is the core of the app.
@@ -207,7 +222,7 @@ Other scripts (root): `npm test`, `npm run lint`, `npm run typecheck`, `npm run 
 - `getVisibleCandles()` returns a frozen `candles.slice(0, currentIndex + 1)`. This is the only data the
   chart receives. Future candles are never sent to React and hidden in the UI; they never reach React at all.
 - **Start point:** the replay starts at the **last candle that has fully closed** at your chosen time.
-  On M5 with a 10:00 start, the last visible candle is the 09:55 candle. The 10:00 candle would contain
+  On M5 with a 15:30 IST start, the last visible candle is the 15:25 candle. The 10:00 candle would contain
   price action after 10:00, so it stays hidden.
 - `next()` reveals exactly one candle. `previous()` steps back for review. `reset()` returns to the
   starting point.
@@ -304,7 +319,9 @@ Shortcuts are ignored while typing in an input. Press Esc first.
 - Market entries only, filled at candle close. No limit or stop entries, trailing stops, partial closes or
   break-even moves yet.
 - Position size has no margin, leverage or minimum lot checks.
-- All times are **UTC**.
+- Times are shown and entered in the selected zone (default **IST, UTC+05:30**). The server, cache,
+  engines and trade records all use UTC internally. The chart shifts bar timestamps by the zone's offset
+  for display, which is the standard approach for Lightweight Charts.
 - Sessions are kept in memory. Reloading the page or starting a new session discards the trade journal.
 - Only XAU/USD is configured, although the data layer and UI are instrument-agnostic.
 - With no provider API key the app cannot load data. There is no offline or sample dataset.

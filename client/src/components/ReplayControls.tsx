@@ -1,6 +1,7 @@
 import { REPLAY_SPEEDS, type ReplaySpeed } from '../replay/replayEngine';
 import type { ReplaySnapshot } from '../store/replaySession';
-import { formatDateTimeUtc } from '../utils/format';
+import { useTimeZone } from '../hooks/useTimeZone';
+import { formatDateTime } from '../utils/format';
 import { Button } from './ui/Button';
 import { Icon } from './ui/Icon';
 import { Spinner } from './ui/Spinner';
@@ -17,6 +18,7 @@ interface Props {
 export function ReplayControls({ snapshot, onPlayPause, onNext, onPrevious, onReset, onSpeedChange }: Props) {
   const { replay, currentCandle, loadingMore, dataExhausted, canAdvance } = snapshot;
   const playing = replay.status === 'playing';
+  const timeZone = useTimeZone();
   const revealedCount = replay.maxRevealedIndex - replay.startIndex;
 
   return (
@@ -52,7 +54,7 @@ export function ReplayControls({ snapshot, onPlayPause, onNext, onPrevious, onRe
             role="radio"
             aria-checked={replay.speed === speed}
             onClick={() => onSpeedChange(speed)}
-            className={`rounded px-2 py-0.5 font-mono text-xs ${replay.speed === speed ? 'bg-terminal-raised text-gold' : 'text-terminal-muted hover:text-terminal-text'}`}
+            className={`rounded px-2 py-0.5 font-mono text-xs ${replay.speed === speed ? 'bg-accent text-white' : 'text-terminal-muted hover:text-terminal-text'}`}
           >
             {speed}x
           </button>
@@ -61,9 +63,9 @@ export function ReplayControls({ snapshot, onPlayPause, onNext, onPrevious, onRe
 
       <div className="ml-auto flex items-center gap-4 text-xs">
         {loadingMore && <Spinner label="Loading more candles..." />}
-        {dataExhausted && <span className="text-gold">End of available data</span>}
+        {dataExhausted && <span className="text-warn">End of available data</span>}
         {!replay.atLiveEdge && (
-          <span className="rounded bg-gold/15 px-2 py-0.5 text-gold" title="Step forward to the latest revealed candle to trade">
+          <span className="rounded bg-warn/15 px-2 py-0.5 text-warn" title="Step forward to the latest revealed candle to trade">
             Reviewing — {replay.maxRevealedIndex - replay.currentIndex} candle(s) behind
           </span>
         )}
@@ -71,7 +73,7 @@ export function ReplayControls({ snapshot, onPlayPause, onNext, onPrevious, onRe
           Bars replayed: <span className="font-mono text-terminal-text">{revealedCount}</span>
         </span>
         <span className="font-mono text-terminal-text" data-testid="current-candle-time">
-          {formatDateTimeUtc(currentCandle.timestamp)}
+          {formatDateTime(currentCandle.timestamp, timeZone)}
         </span>
       </div>
     </div>

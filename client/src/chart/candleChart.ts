@@ -15,6 +15,7 @@ import {
 } from 'lightweight-charts';
 import type { Candle } from '../types/market';
 import { CHART_COLORS } from './theme';
+import { timeZoneOffsetMs } from '../utils/timezone';
 
 export interface ChartPriceLine {
   id: string;
@@ -43,8 +44,14 @@ export class CandleChart {
   #priceLines: IPriceLine[] = [];
   #lastTime: number | null = null;
   #count = 0;
+  readonly #timeZone: string;
 
-  constructor(container: HTMLElement, pricePrecision: number) {
+  /**
+   * @param timeZone Display zone. Lightweight Charts formats timestamps as UTC, so bar times are
+   *   shifted by the zone's offset (per bar, so daylight saving is respected) — display only.
+   */
+  constructor(container: HTMLElement, pricePrecision: number, timeZone: string) {
+    this.#timeZone = timeZone;
     this.#chart = createChart(container, {
       autoSize: true,
       // Explicit locale: navigator.language can be a tag Intl rejects (e.g. "en-US@posix").
@@ -52,7 +59,8 @@ export class CandleChart {
       layout: {
         background: { type: ColorType.Solid, color: CHART_COLORS.background },
         textColor: CHART_COLORS.text,
-        fontSize: 11,
+        fontSize: 12,
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif',
         attributionLogo: false,
       },
       grid: {
@@ -61,8 +69,8 @@ export class CandleChart {
       },
       crosshair: {
         mode: CrosshairMode.Normal,
-        vertLine: { color: CHART_COLORS.crosshair, labelBackgroundColor: CHART_COLORS.border },
-        horzLine: { color: CHART_COLORS.crosshair, labelBackgroundColor: CHART_COLORS.border },
+        vertLine: { color: CHART_COLORS.crosshair, labelBackgroundColor: CHART_COLORS.crosshairLabel },
+        horzLine: { color: CHART_COLORS.crosshair, labelBackgroundColor: CHART_COLORS.crosshairLabel },
       },
       rightPriceScale: { borderColor: CHART_COLORS.border },
       timeScale: { borderColor: CHART_COLORS.border, timeVisible: true, secondsVisible: false, rightOffset: 8 },
@@ -89,9 +97,9 @@ export class CandleChart {
       last !== undefined && candles.length === this.#count + 1 && this.#lastTime !== null && last.time > this.#lastTime;
 
     if (isSingleAppend) {
-      this.#series.update(toBar(last));
+      this.#series.update(this.#toBar(last));
     } else {
-      this.#series.setData(candles.map(toBar));
+      this.#series.setData(candles.map((c) => this.#toBar(c)));
     }
     this.#count = candles.length;
     this.#lastTime = last?.time ?? null;
@@ -114,7 +122,7 @@ export class CandleChart {
   setMarkers(markers: readonly ChartMarker[]): void {
     const sorted: SeriesMarker<Time>[] = [...markers]
       .sort((a, b) => a.time - b.time)
-      .map((m) => ({ ...m, time: m.time as UTCTimestamp }));
+      .map((m) => ({ ...m, time: this.#displayTime(m.time) }));
     this.#markers.setMarkers(sorted);
   }
 
@@ -127,8 +135,12 @@ export class CandleChart {
   destroy(): void {
     this.#chart.remove();
   }
-}
 
-function toBar(c: Candle) {
-  return { time: c.time as UTCTimestamp, open: c.open, high: c.high, low: c.low, close: c.close };
+  #displayTime(utcSeconds: number): UTCTimestamp {
+    return (utcSeconds + timeZoneOffsetMs(utcSeconds * 1000, this.#timeZone) / 1000) as UTCTimestamp;
+  }
+
+  #toBar(c: Candle) {
+    return { time: this.#displayTime(c.time), open: c.open, high: c.high, low: c.low, close: c.close };
+  }
 }

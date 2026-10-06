@@ -4,7 +4,7 @@ import { ReplaySession, type CandleFetcher } from '../store/replaySession';
 import type { TradingAccount } from '../trading/tradingAccount';
 import { GRANULARITY_SECONDS } from '../types/market';
 import type { SessionSetup } from '../types/session';
-import { formatDateTimeUtc } from '../utils/format';
+import { formatDateTime } from '../utils/format';
 import { fetchCandles } from './candles';
 
 /** A user-facing problem with the chosen replay period. */
@@ -31,7 +31,7 @@ export async function loadReplaySession(
   const fromMs = setup.startMs - window.historyMs;
   const toMs = Math.min(setup.startMs + window.aheadMs, nowMs);
   const candles = await fetcher(setup.instrument, setup.granularity, fromMs, toMs);
-  const when = formatDateTimeUtc(setup.startMs);
+  const when = formatDateTime(setup.startMs, setup.timeZone);
 
   if (candles.length === 0) {
     throw new SessionLoadError(`No ${setup.granularity} candles found around ${when}. The market may have been closed (weekend/holiday).`);

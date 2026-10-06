@@ -1,24 +1,27 @@
 import { useState } from 'react';
 import { startMsFrom } from '../utils/setupForm';
+import { timeZoneShort, toWallClock } from '../utils/timezone';
 import { Button } from './ui/Button';
 import { Field, inputClass } from './ui/Field';
 import { Modal } from './ui/Modal';
 
 interface Props {
   initialMs: number;
+  timeZone: string;
   hasOpenTrades: boolean;
   onJump: (startMs: number) => void;
   onClose: () => void;
 }
 
-export function JumpToDate({ initialMs, hasOpenTrades, onJump, onClose }: Props) {
-  const iso = new Date(initialMs).toISOString();
-  const [date, setDate] = useState(iso.slice(0, 10));
-  const [time, setTime] = useState(iso.slice(11, 16));
+export function JumpToDate({ initialMs, timeZone, hasOpenTrades, onJump, onClose }: Props) {
+  const initial = toWallClock(initialMs, timeZone);
+  const [date, setDate] = useState(initial.date);
+  const [time, setTime] = useState(initial.time);
+  const zone = timeZoneShort(timeZone);
   const [error, setError] = useState<string | null>(null);
 
   const submit = () => {
-    const ms = startMsFrom(date, time);
+    const ms = startMsFrom(date, time, timeZone);
     if (Number.isNaN(ms)) return setError('Choose a valid date and time.');
     if (ms >= Date.now()) return setError('The start must be in the past.');
     onJump(ms);
@@ -40,17 +43,17 @@ export function JumpToDate({ initialMs, hasOpenTrades, onJump, onClose }: Props)
       }
     >
       {hasOpenTrades ? (
-        <p className="text-gold">Close your open positions before jumping to another period.</p>
+        <p className="text-warn">Close your open positions before jumping to another period.</p>
       ) : (
         <>
           <p className="mb-4 text-terminal-muted">
             Loads a new replay starting at this time. Your balance and trade history carry over.
           </p>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Date (UTC)" htmlFor="jump-date" error={error}>
+            <Field label={`Date (${zone})`} htmlFor="jump-date" error={error}>
               <input id="jump-date" type="date" className={inputClass} value={date} onChange={(e) => setDate(e.target.value)} />
             </Field>
-            <Field label="Time (UTC)" htmlFor="jump-time">
+            <Field label={`Time (${zone})`} htmlFor="jump-time">
               <input id="jump-time" type="time" className={inputClass} value={time} onChange={(e) => setTime(e.target.value)} />
             </Field>
           </div>

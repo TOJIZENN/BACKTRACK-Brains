@@ -12,6 +12,7 @@ const setup: SessionSetup = {
   startingBalance: 10_000,
   riskPercent: 1,
   sameCandleRule: 'SL_FIRST',
+  timeZone: 'UTC',
 };
 const FAR_FUTURE = () => Date.parse('2027-01-01T00:00:00Z');
 const flush = () => vi.advanceTimersByTimeAsync(0);

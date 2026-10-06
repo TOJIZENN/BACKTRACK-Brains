@@ -8,25 +8,27 @@ interface Props {
   /** Revealed candles only — the replay engine decides what is visible. */
   candles: readonly Candle[];
   pricePrecision: number;
+  /** IANA zone for the time axis and crosshair */
+  timeZone: string;
   priceLines?: readonly ChartPriceLine[];
   markers?: readonly ChartMarker[];
   /** Change this value to re-center the chart on the latest candle (e.g. on a new session/reset). */
   focusKey?: string | number;
 }
 
-export function CandleChartView({ candles, pricePrecision, priceLines = [], markers = [], focusKey }: Props) {
+export function CandleChartView({ candles, pricePrecision, timeZone, priceLines = [], markers = [], focusKey }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<CandleChart | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
-    const chart = new CandleChart(containerRef.current, pricePrecision);
+    const chart = new CandleChart(containerRef.current, pricePrecision, timeZone);
     chartRef.current = chart;
     return () => {
       chart.destroy();
       chartRef.current = null;
     };
-  }, [pricePrecision]);
+  }, [pricePrecision, timeZone]);
 
   useEffect(() => {
     chartRef.current?.setCandles(candles);

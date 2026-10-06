@@ -1,7 +1,8 @@
 import { useState, type MouseEvent } from 'react';
 import type { EquityPoint } from '../trading/statistics';
 import { CHART_COLORS } from '../chart/theme';
-import { formatDateTimeUtc, formatMoney } from '../utils/format';
+import { useTimeZone } from '../hooks/useTimeZone';
+import { formatDateTime, formatMoney } from '../utils/format';
 
 const WIDTH = 360;
 const HEIGHT = 170;
@@ -16,6 +17,7 @@ interface Props {
 /** Closed-trade balance after each trade. Index-based x-axis keeps same-candle exits distinct. */
 export function EquityCurve({ points, startingBalance }: Props) {
   const [hover, setHover] = useState<number | null>(null);
+  const timeZone = useTimeZone();
 
   if (points.length < 2) {
     return <p className="flex h-full items-center justify-center text-sm text-terminal-muted">Close a trade to see the equity curve.</p>;
@@ -95,7 +97,7 @@ export function EquityCurve({ points, startingBalance }: Props) {
           <div className="font-mono text-terminal-text">{formatMoney(hovered.balance)}</div>
           <div className="text-terminal-muted">
             {hover === 0 ? 'Starting balance' : `After trade ${hover}`}
-            {hovered.time && ` · ${formatDateTimeUtc(hovered.time)}`}
+            {hovered.time && ` · ${formatDateTime(hovered.time, timeZone)}`}
           </div>
         </div>
       )}
