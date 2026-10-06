@@ -94,3 +94,82 @@ describe('loadReplaySession', () => {
     );
   });
 });
+
+describe('ReplaySession trading', () => {
+  // Candle i has OHLC = 100 + i, so the close at index 2 is 102.
+  function session(candles = makeCandles(300)) {
+    return new ReplaySession(setup, candles, 2, 0, vi.fn<CandleFetcher>(async () => []), FAR_FUTURE);
+  }
+  const order = { side: 'LONG' as const, stopLoss: 97, takeProfit: 112, riskPercent: 1 };
+
+  it('fills market orders at the current candle close, timestamped at its close time', () => {
+    const s = session();
+    const result = s.placeOrder(order);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.trade.entryPrice).toBe(102);
+    expect(result.trade.entryTime).toBe('2026-01-15T00:15:00Z');
+    expect(s.getSnapshot().trades).toHaveLength(1);
+    expect(s.getSnapshot().events.at(-1)?.kind).toBe('opened');
+  });
+
+  it('resolves trades as new candles are revealed and updates balance', () => {
+    const s = session();
+    s.placeOrder(order); // 20 oz, risk $100, TP at 112 (+$200)
+    for (let i = 0; i < 9; i++) s.next(); // candle 11: high 111 → still open
+    expect(s.getSnapshot().stats.openTrades).toBe(1);
+    s.next(); // candle 12 high 112 → TP
+    const snap = s.getSnapshot();
+    expect(snap.trades[0]).toMatchObject({ status: 'CLOSED', exitReason: 'TAKE_PROFIT', pnl: 200, rMultiple: 2 });
+    expect(snap.stats.balance).toBe(10_200);
+    expect(snap.events.at(-1)?.kind).toBe('closed');
+  });
+
+  it('refuses orders while reviewing past candles', () => {
+    const s = session();
+    s.next();
+    s.previous();
+    const result = s.placeOrder(order);
+    expect(result).toEqual({ ok: false, error: expect.stringContaining('reviewing past candles') });
+  });
+
+  it('reports invalid SL/TP', () => {
+    const result = session().placeOrder({ ...order, stopLoss: 103 });
+    expect(result).toEqual({ ok: false, error: expect.stringContaining('stop loss must be below') });
+  });
+
+  it('does not re-resolve trades when stepping back and forward', () => {
+    const candles = makeCandles(300);
+    candles[4] = { ...candles[4], low: 90 }; // wick through the stop on candle 4
+    const s = session(candles);
+    s.next(); // candle 3
+    s.placeOrder(order); // entry 103, SL 97
+    s.previous(); // back to 2
+    s.next(); // candle 3 again — not new, and before entry anyway
+    expect(s.getSnapshot().stats.openTrades).toBe(1);
+    s.next(); // candle 4 is new → SL
+    expect(s.getSnapshot().trades[0].exitReason).toBe('STOP_LOSS');
+    expect(s.getSnapshot().stats.totalTrades).toBe(1);
+  });
+
+  it('reset clears trades and restores the starting balance', () => {
+    const s = session();
+    s.placeOrder(order);
+    for (let i = 0; i < 10; i++) s.next();
+    s.reset();
+    const snap = s.getSnapshot();
+    expect(snap.trades).toEqual([]);
+    expect(snap.stats.balance).toBe(10_000);
+    expect(snap.replay.currentIndex).toBe(2);
+  });
+
+  it('manual close at the current close', () => {
+    const s = session();
+    const opened = s.placeOrder(order);
+    s.next();
+    s.next();
+    if (!opened.ok) throw new Error('order failed');
+    const closed = s.closeTrade(opened.trade.id);
+    expect(closed.ok && closed.trade).toMatchObject({ exitReason: 'MANUAL', exitPrice: 104, pnl: 40 });
+  });
+});

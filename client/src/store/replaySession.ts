@@ -1,7 +1,10 @@
 import { DATA_WINDOWS, MAX_EMPTY_FORWARD_FETCHES, PREFETCH_THRESHOLD_CANDLES } from '../replay/dataWindow';
 import { ReplayEngine, type ReplaySpeed, type ReplayState } from '../replay/replayEngine';
 import { ReplayPlayer } from '../replay/replayPlayer';
-import type { Candle, Granularity } from '../types/market';
+import { computeStats, type AccountStats } from '../trading/statistics';
+import { OrderRejectedError, TradingAccount, type MarketQuote, type OrderPreview } from '../trading/tradingAccount';
+import type { OrderRequest, Trade } from '../trading/types';
+import { GRANULARITY_SECONDS, INSTRUMENTS, type Candle, type Granularity } from '../types/market';
 import type { SessionSetup } from '../types/session';
 
 /** Fetches completed candles with open time in [fromMs, toMs). */
@@ -21,7 +24,21 @@ export interface ReplaySnapshot {
   error: string | null;
   /** Increments on every reset, so views can re-center. */
   runId: number;
+  trades: readonly Trade[];
+  stats: AccountStats;
+  /** Most recent trade events, newest last (for notifications) */
+  events: readonly TradeEvent[];
 }
+
+export interface TradeEvent {
+  id: number;
+  kind: 'opened' | 'closed';
+  trade: Trade;
+}
+
+export type OrderResult = { ok: true; trade: Trade } | { ok: false; error: string };
+
+const MAX_EVENTS = 10;
 
 /**
  * Coordinates the replay engine, the playback timer and forward-data prefetching,
@@ -42,6 +59,9 @@ export class ReplaySession {
   #disposed = false;
   #playing = false;
   #runId = 0;
+  #account: TradingAccount;
+  #events: TradeEvent[] = [];
+  #nextEventId = 1;
   #snapshot: ReplaySnapshot;
 
   constructor(
@@ -51,8 +71,10 @@ export class ReplaySession {
     loadedUntilMs: number,
     fetchCandles: CandleFetcher,
     now: () => number = Date.now,
+    account?: TradingAccount,
   ) {
     this.setup = setup;
+    this.#account = account ?? this.#newAccount();
     this.#engine = new ReplayEngine(candles, startIndex);
     this.#player = new ReplayPlayer(() => this.#tick(), () => this.#engine.getIntervalMs());
     this.#fetchCandles = fetchCandles;
@@ -109,12 +131,56 @@ export class ReplaySession {
     this.#emit();
   }
 
+  /** Restarts the replay from its starting point with a fresh account. */
   reset(): void {
     this.#playing = false;
     this.#player.stop();
     this.#engine.reset();
+    this.#account = this.#newAccount();
+    this.#events = [];
     this.#runId += 1;
     this.#emit();
+  }
+
+  // ---- trading ----
+
+  /** The account, e.g. to carry balance and history into a new session (Jump to date). */
+  get account(): TradingAccount {
+    return this.#account;
+  }
+
+  previewOrder(order: OrderRequest): OrderPreview {
+    return this.#account.previewOrder(order, this.#quote().price);
+  }
+
+  placeOrder(order: OrderRequest): OrderResult {
+    if (!this.#engine.getState().atLiveEdge) {
+      return { ok: false, error: 'You are reviewing past candles. Step forward to the latest candle to trade.' };
+    }
+    try {
+      const trade = this.#account.openTrade(order, this.#quote());
+      this.#pushEvent('opened', trade);
+      this.#emit();
+      return { ok: true, trade };
+    } catch (error) {
+      if (error instanceof OrderRejectedError) return { ok: false, error: error.message };
+      throw error;
+    }
+  }
+
+  closeTrade(tradeId: string): OrderResult {
+    if (!this.#engine.getState().atLiveEdge) {
+      return { ok: false, error: 'Step forward to the latest candle to close trades at market.' };
+    }
+    try {
+      const trade = this.#account.closeTrade(tradeId, this.#quote());
+      this.#pushEvent('closed', trade);
+      this.#emit();
+      return { ok: true, trade };
+    } catch (error) {
+      if (error instanceof OrderRejectedError) return { ok: false, error: error.message };
+      throw error;
+    }
   }
 
   dispose(): void {
@@ -125,12 +191,27 @@ export class ReplaySession {
 
   // ---- internals ----
 
-  /** Hook for subclasses/collaborators: called exactly once per newly revealed candle. */
-  protected onNewCandle(_candle: Candle): void {}
+  #newAccount(): TradingAccount {
+    return new TradingAccount(this.setup.startingBalance, this.setup.sameCandleRule, INSTRUMENTS[this.setup.instrument]);
+  }
+
+  /** Market orders fill at the close of the latest revealed candle — nothing later is known. */
+  #quote(): MarketQuote {
+    const candle = this.#engine.getCurrentCandle();
+    const closeTimeMs = (candle.time + GRANULARITY_SECONDS[this.setup.granularity]) * 1000;
+    return { price: candle.close, time: new Date(closeTimeMs).toISOString().replace('.000Z', 'Z'), candleTime: candle.time };
+  }
+
+  #pushEvent(kind: TradeEvent['kind'], trade: Trade): void {
+    this.#events = [...this.#events, { id: this.#nextEventId++, kind, trade }].slice(-MAX_EVENTS);
+  }
 
   #step(): boolean {
     const result = this.#engine.next();
-    if (result?.isNew) this.onNewCandle(result.candle);
+    // Trades are resolved exactly once per candle, the first time it is revealed.
+    if (result?.isNew) {
+      for (const trade of this.#account.processCandle(result.candle)) this.#pushEvent('closed', trade);
+    }
     this.#maybePrefetch();
     return result !== null;
   }
@@ -192,14 +273,19 @@ export class ReplaySession {
 
   #buildSnapshot(): ReplaySnapshot {
     const replay = this.#engine.getState();
+    const currentCandle = this.#engine.getCurrentCandle();
+    const trades = this.#account.getTrades();
     return {
       replay: { ...replay, status: this.#playing ? 'playing' : 'paused' },
       visibleCandles: this.#engine.getVisibleCandles(),
-      currentCandle: this.#engine.getCurrentCandle(),
+      currentCandle,
       loadingMore: this.#loadingMore,
       dataExhausted: this.#dataExhausted && !this.#engine.hasNext(),
       error: this.#error,
       runId: this.#runId,
+      trades,
+      stats: computeStats(trades, this.#account.startingBalance, this.#account.getEquity(this.#engine.getLiveEdgeCandle().close)),
+      events: this.#events,
     };
   }
 }

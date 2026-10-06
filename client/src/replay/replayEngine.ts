@@ -72,6 +72,11 @@ export class ReplayEngine {
     return this.#candles[this.#currentIndex];
   }
 
+  /** The furthest candle revealed so far (equals the current candle unless the user stepped back). */
+  getLiveEdgeCandle(): Candle {
+    return this.#candles[this.#maxRevealedIndex];
+  }
+
   hasNext(): boolean {
     return this.#currentIndex < this.#candles.length - 1;
   }

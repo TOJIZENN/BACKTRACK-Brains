@@ -1,7 +1,11 @@
+import { useMemo } from 'react';
 import { CandleChartView } from '../components/CandleChartView';
 import { ReplayControls } from '../components/ReplayControls';
+import { TradingPanel } from '../components/TradingPanel';
 import { ErrorBanner } from '../components/ui/ErrorBanner';
 import { Button } from '../components/ui/Button';
+import { draftLines, openTradeLines, tradeMarkers } from '../chart/tradeOverlays';
+import { useOrderTicket } from '../hooks/useOrderTicket';
 import { useReplaySnapshot } from '../hooks/useReplaySession';
 import type { ReplaySession } from '../store/replaySession';
 import { SAME_CANDLE_RULE_LABELS } from '../trading/types';
@@ -14,8 +18,21 @@ interface Props {
 
 export function ReplayPage({ session, onExit }: Props) {
   const snapshot = useReplaySnapshot(session);
+  const ticket = useOrderTicket(session);
   const { setup } = session;
   const instrument = INSTRUMENTS[setup.instrument];
+
+  const { trades, currentCandle } = snapshot;
+  const priceLines = useMemo(
+    () => [...openTradeLines(trades), ...draftLines(ticket.order.stopLoss, ticket.order.takeProfit)],
+    [trades, ticket.order.stopLoss, ticket.order.takeProfit],
+  );
+  const markers = useMemo(() => tradeMarkers(trades, currentCandle.time), [trades, currentCandle.time]);
+
+  const closePosition = (tradeId: string) => {
+    const result = session.closeTrade(tradeId);
+    if (!result.ok) ticket.setError(result.error);
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -48,9 +65,12 @@ export function ReplayPage({ session, onExit }: Props) {
           <CandleChartView
             candles={snapshot.visibleCandles}
             pricePrecision={instrument.pricePrecision}
+            priceLines={priceLines}
+            markers={markers}
             focusKey={snapshot.runId}
           />
         </section>
+        <TradingPanel snapshot={snapshot} ticket={ticket} instrument={instrument} onClosePosition={closePosition} />
       </main>
 
       <ReplayControls
