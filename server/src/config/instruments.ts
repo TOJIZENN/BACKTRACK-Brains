@@ -33,5 +33,5 @@ export const MAX_REQUEST_DAYS: Record<Granularity, number> = {
   H1: 366,
 };
 
-/** OANDA rejects candle requests that would return more than this many candles. */
-export const OANDA_MAX_CANDLES_PER_REQUEST = 5000;
+/** Both OANDA and Twelve Data cap a single candle request at this many candles. */
+export const UPSTREAM_MAX_CANDLES_PER_REQUEST = 5000;

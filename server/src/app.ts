@@ -1,17 +1,18 @@
+import path from 'node:path';
 import express from 'express';
 import { config } from './config/env.js';
 import { createApiRouter, type ApiDependencies } from './routes/index.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { createCandlesService } from './services/candles.service.js';
 import { createFileCandleCache } from './services/candleCache.js';
-import { createOandaClient } from './services/oanda/oanda.client.js';
-import { createOandaCandleSource } from './services/oanda/oanda.service.js';
+import { createCandleSource } from './services/candleSource.factory.js';
 
 export function createDefaultDependencies(): ApiDependencies {
   return {
     candlesService: createCandlesService(
-      createOandaCandleSource(createOandaClient()),
-      createFileCandleCache(config.cacheDir),
+      createCandleSource(),
+      // One cache folder per provider, so prices from different feeds never mix.
+      createFileCandleCache(path.join(config.cacheDir, config.dataProvider)),
     ),
   };
 }

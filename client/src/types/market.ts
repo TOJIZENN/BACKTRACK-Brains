@@ -8,7 +8,7 @@ export const GRANULARITY_SECONDS: Record<Granularity, number> = {
   H1: 3600,
 };
 
-/** Candle as delivered by our backend (never the raw OANDA shape). */
+/** Candle as delivered by our backend (never a provider's raw shape). */
 export interface ApiCandle {
   /** Open time, ISO-8601 UTC */
   timestamp: string;

@@ -28,13 +28,17 @@ export function SetupPage({ onStart, loading, error, onDismissError }: Props) {
   const [values, setValues] = useState<SetupFormValues>(() => loadSavedSetup() ?? defaultSetupValues());
   const [errors, setErrors] = useState<SetupFormErrors>({});
   const [serverWarning, setServerWarning] = useState<string | null>(null);
+  const [providerName, setProviderName] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
     fetchHealth(controller.signal)
       .then((health) => {
-        if (!health.oandaConfigured) {
-          setServerWarning('OANDA_API_KEY is not configured on the server. Add it to .env and restart the server to load candles.');
+        setProviderName(health.dataProviderName);
+        if (!health.providerConfigured) {
+          setServerWarning(
+            `${health.providerKeyVariable} is not configured on the server. Add your ${health.dataProviderName} key to .env and restart the server to load candles.`,
+          );
         }
       })
       .catch((err: unknown) => {
@@ -68,6 +72,11 @@ export function SetupPage({ onStart, loading, error, onDismissError }: Props) {
           <p className="mt-1 text-sm text-terminal-muted">
             Manual historical replay. Simulation only — no live orders are ever placed.
           </p>
+          {providerName && (
+            <p className="mt-1 text-xs text-terminal-muted">
+              Market data: <span className="text-terminal-text">{providerName}</span>
+            </p>
+          )}
         </div>
 
         {serverWarning && (

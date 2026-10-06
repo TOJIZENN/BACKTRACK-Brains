@@ -1,8 +1,8 @@
-import { GRANULARITY_SECONDS, OANDA_MAX_CANDLES_PER_REQUEST } from '../config/instruments.js';
+import { GRANULARITY_SECONDS, UPSTREAM_MAX_CANDLES_PER_REQUEST } from '../config/instruments.js';
 import type { Candle, Granularity } from '../types/candle.js';
 import { MS_PER_DAY, MS_PER_SECOND, utcDayKey, utcDaysInRange } from '../utils/time.js';
 import type { CandleCache } from './candleCache.js';
-import type { HistoricalCandleSource } from './oanda/oanda.service.js';
+import type { HistoricalCandleSource } from './candleSource.js';
 
 /** A day is only cached once it is safely in the past, so a partially-formed day is never frozen. */
 const CACHE_SAFETY_MARGIN_MS = 60 * 60 * 1000;
@@ -20,7 +20,7 @@ export interface CandlesService {
 
 export function maxDaysPerUpstreamRequest(granularity: Granularity): number {
   const candlesPerDay = MS_PER_DAY / (GRANULARITY_SECONDS[granularity] * MS_PER_SECOND);
-  return Math.max(1, Math.floor(OANDA_MAX_CANDLES_PER_REQUEST / candlesPerDay));
+  return Math.max(1, Math.floor(UPSTREAM_MAX_CANDLES_PER_REQUEST / candlesPerDay));
 }
 
 /** Groups consecutive missing days into upstream-sized chunks. */
@@ -61,7 +61,7 @@ export function createCandlesService(
         else missing.push(day);
       }
 
-      // Sequential on purpose: friendlier to OANDA rate limits than a burst of parallel requests.
+      // Sequential on purpose: friendlier to provider rate limits (Twelve Data free plan: 8/min) than a burst of parallel requests.
       for (const chunk of chunkMissingDays(missing, maxDaysPerUpstreamRequest(granularity))) {
         const chunkStart = chunk[0];
         const chunkEnd = Math.min(chunk[chunk.length - 1] + MS_PER_DAY, nowMs);

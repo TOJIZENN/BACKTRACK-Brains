@@ -1,4 +1,5 @@
-import type { Candle, Granularity } from '../../types/candle.js';
+import type { Candle } from '../../types/candle.js';
+import type { HistoricalCandleSource } from '../candleSource.js';
 import { toIsoSeconds } from '../../utils/time.js';
 import { HttpError } from '../../utils/httpError.js';
 import type { OandaClient } from './oanda.client.js';
@@ -18,11 +19,6 @@ export function normalizeOandaCandle(raw: OandaCandlestick): Candle | null {
   if (![timeMs, open, high, low, close].every(Number.isFinite)) return null;
 
   return { timestamp: toIsoSeconds(timeMs), open, high, low, close, volume: raw.volume ?? 0 };
-}
-
-export interface HistoricalCandleSource {
-  /** Completed candles with open time in [fromMs, toMs), ascending. */
-  fetchCandles(instrument: string, granularity: Granularity, fromMs: number, toMs: number): Promise<Candle[]>;
 }
 
 export function createOandaCandleSource(client: OandaClient): HistoricalCandleSource {

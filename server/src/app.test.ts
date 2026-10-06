@@ -13,6 +13,8 @@ describe('API', () => {
     const res = await request(appWith().app).get('/api/health');
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ status: 'ok', mode: 'simulation-only' });
+    expect(['twelvedata', 'oanda']).toContain(res.body.dataProvider);
+    expect(typeof res.body.providerConfigured).toBe('boolean');
   });
 
   it('GET /api/instruments lists XAU_USD with its timeframes', async () => {

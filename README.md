@@ -1,8 +1,8 @@
 # Backtrack — XAU/USD Historical Replay & Manual Backtesting
 
 > **Simulation only.** This application replays *historical* market data and simulates trades locally.
-> It never places orders, never connects to a live trading account, and OANDA is used **only** as a
-> source of historical candles. It is for education and personal backtesting.
+> It never places orders, never connects to a live trading account, and the market-data provider
+> (**Twelve Data** by default, or OANDA) is used **only** as a source of historical candles. It is for education and personal backtesting.
 
 ## Project Overview
 
@@ -16,7 +16,7 @@ It is **not** an automated strategy tester: every trading decision is made by yo
 
 ## Features
 
-- XAU/USD on **M1, M5 (default), M15, H1**, loaded from OANDA's historical candle API
+- XAU/USD on **M1, M5 (default), M15, H1**, loaded from **Twelve Data** (default) or OANDA, switchable with one env variable
 - Replay setup screen: timeframe, date, start time (UTC), starting balance, risk %, same-candle rule,
   plus a "random date" button
 - Strict **no-lookahead** replay: only closed candles up to the replay point are ever rendered
@@ -48,9 +48,11 @@ It is **not** an automated strategy tester: every trading decision is made by yo
 │     ├─ types/ utils/
 ├─ server/                 Node + Express + TypeScript
 │  └─ src/
-│     ├─ services/oanda/   oanda.client.ts (HTTP + error mapping), oanda.service.ts (normalization),
-│     │                    oanda.types.ts (raw OANDA shapes, never leave this folder)
-│     ├─ services/         candles.service.ts (range → days → cache/upstream), candleCache.ts
+│     ├─ services/twelvedata/  twelvedata.client.ts (HTTP + error mapping), twelvedata.service.ts
+│     │                        (normalization), twelvedata.types.ts (raw shapes, never leave this folder)
+│     ├─ services/oanda/       same structure for the optional OANDA provider
+│     ├─ services/         candleSource.ts (provider interface), candleSource.factory.ts (DATA_PROVIDER),
+│     │                    candles.service.ts (range → days → cache/upstream), candleCache.ts
 │     ├─ controllers/ routes/ middleware/ config/ types/ utils/
 ├─ .env.example
 └─ README.md
@@ -59,7 +61,7 @@ It is **not** an automated strategy tester: every trading decision is made by yo
 Data flow:
 
 ```
-OANDA ──► server (normalize + day-file cache) ──► /api/candles
+Twelve Data / OANDA ──► server (normalize + day-file cache) ──► /api/candles
                                                      │
                      client: sessionLoader ──► ReplayEngine (#private full dataset)
                                                      │  getVisibleCandles() = candles[0..currentIndex]
@@ -83,30 +85,63 @@ a database (MongoDB/PostgreSQL) can be added later without touching the engines.
 | Linting  | oxlint, `tsc` type checks                                       |
 | Storage  | JSON files for the candle cache; no database                    |
 
-## OANDA Setup
+## Market Data Setup
+
+The server loads candles from one provider, chosen with `DATA_PROVIDER`. Both providers are normalized
+into the same internal `Candle`, so the replay and trading engines don't know or care which one is used.
+
+### Twelve Data (default)
+
+1. Create a free account at [twelvedata.com](https://twelvedata.com) and copy your API key from
+   *Account → API Keys*.
+2. Set `TWELVE_DATA_API_KEY` in `.env` and leave `DATA_PROVIDER=twelvedata`.
+
+How the integration works (`server/src/services/twelvedata/`):
+
+- Calls `GET https://api.twelvedata.com/time_series` with `symbol=XAU/USD`,
+  `interval=1min|5min|15min|1h`, `start_date`/`end_date`, `timezone=UTC`, `order=ASC` and
+  `outputsize=5000`. The key is sent as the `apikey` parameter, from the server only.
+- Twelve Data reports errors either as an HTTP status or as HTTP 200 with `{"status":"error","code":…}`.
+  Both are mapped to the app's error codes (401 → `INVALID_CREDENTIALS`, 429 → `RATE_LIMITED`, 5xx →
+  `UPSTREAM_UNAVAILABLE`).
+- "No data is available on the specified dates" (weekends, holidays) is treated as an empty range, not an error.
+- The still-forming latest bar is dropped. Forex/metal bars have no volume, so `volume` is `0`.
+- **Free plan limits:** 8 requests/minute and 800/day. The day-file cache means each day is downloaded
+  only once, and a typical M5 session needs just a few requests. If you hit the limit, the app says so;
+  wait a minute and continue.
+- Check that your plan includes `XAU/USD`. If it doesn't, Twelve Data's message is shown in the app.
+
+### OANDA (optional)
+
+Set `DATA_PROVIDER=oanda`, then:
 
 1. Create an OANDA account. A free **practice (demo)** account is enough because only historical
    data is read.
 2. In the OANDA hub, open *Manage API Access* and generate a **personal access token**.
-3. Note whether the token is for the practice or live environment and set `OANDA_BASE_URL` to match:
-   - Practice: `https://api-fxpractice.oanda.com`
-   - Live: `https://api-fxtrade.oanda.com`
+3. Set `OANDA_API_KEY`, and set `OANDA_BASE_URL` to match the token: practice
+   `https://api-fxpractice.oanda.com`, live `https://api-fxtrade.oanda.com`.
 
-The token is read only by the server. The browser talks to our own `/api` endpoints and never sees the key.
-The OANDA client only implements the historical **candles** endpoint. There is no code path that places orders.
+OANDA candles are mid prices (`price=M`). Twelve Data's XAU/USD feed is a different source, so prices
+can differ slightly between providers.
+
+For either provider, the key is read only by the server. The browser talks to our own `/api` endpoints and
+never sees it. Only historical candle endpoints are implemented; there is no code path that places orders.
 
 ## Environment Variables
 
 Copy `.env.example` to `.env` in the repository root (`.env` is git-ignored):
 
-| Variable           | Required | Description                                                          |
-| ------------------ | -------- | -------------------------------------------------------------------- |
-| `OANDA_API_KEY`    | yes      | OANDA personal access token                                          |
-| `OANDA_ACCOUNT_ID` | no       | Not needed for candle data; reserved for future account-scoped calls |
-| `OANDA_BASE_URL`   | yes      | Practice or live REST host (see above)                               |
-| `PORT`             | no       | Server port (default `4000`)                                         |
-| `CACHE_DIR`        | no       | Candle cache directory, relative to `server/` (default `cache`)      |
-| `OANDA_TIMEOUT_MS` | no       | OANDA request timeout (default `15000`)                              |
+| Variable               | Required             | Description                                                     |
+| ---------------------- | -------------------- | --------------------------------------------------------------- |
+| `DATA_PROVIDER`        | no                   | `twelvedata` (default) or `oanda`                               |
+| `TWELVE_DATA_API_KEY`  | yes, for Twelve Data | Twelve Data API key                                             |
+| `TWELVE_DATA_BASE_URL` | no                   | Default `https://api.twelvedata.com`                            |
+| `OANDA_API_KEY`        | yes, for OANDA       | OANDA personal access token                                     |
+| `OANDA_ACCOUNT_ID`     | no                   | Not needed for candle data; reserved for future use             |
+| `OANDA_BASE_URL`       | no                   | Practice (default) or live REST host                            |
+| `PORT`                 | no                   | Server port (default `4000`)                                    |
+| `CACHE_DIR`            | no                   | Candle cache directory, relative to `server/` (default `cache`) |
+| `UPSTREAM_TIMEOUT_MS`  | no                   | Market-data request timeout (default `15000`)                   |
 
 ## Installation
 
@@ -114,7 +149,7 @@ Copy `.env.example` to `.env` in the repository root (`.env` is git-ignored):
 git clone <this repo>
 cd BACKTRACK-Brains
 npm install          # installs client + server (npm workspaces)
-cp .env.example .env # then edit .env and add your OANDA token
+cp .env.example .env # then edit .env and add your Twelve Data API key
 ```
 
 ## Running Backend
@@ -127,18 +162,19 @@ Endpoints:
 
 | Method | Path               | Description                                                           |
 | ------ | ------------------ | --------------------------------------------------------------------- |
-| GET    | `/api/health`      | Server status and whether the OANDA key is configured                 |
+| GET    | `/api/health`      | Server status, active data provider and whether its key is configured |
 | GET    | `/api/instruments` | Supported instruments and timeframes                                  |
 | GET    | `/api/candles`     | `?instrument=XAU_USD&granularity=M5&from=<ISO>&to=<ISO>` → `{ candles }` |
 
-Candles are returned in our own format (`{ timestamp, open, high, low, close, volume }`, mid prices,
+Candles are returned in our own format (`{ timestamp, open, high, low, close, volume }`,
 completed candles only) with open time in `[from, to)`. Errors use `{ error: { code, message } }` with
 codes such as `CONFIG_MISSING`, `INVALID_CREDENTIALS`, `RATE_LIMITED`, `UPSTREAM_TIMEOUT`,
 `UPSTREAM_UNAVAILABLE` and `BAD_REQUEST`.
 
-**Caching:** responses are cached per UTC day in `server/cache/XAU_USD/M5/YYYY-MM-DD.json`. A day is
+**Caching:** responses are cached per provider and UTC day in
+`server/cache/twelvedata/XAU_USD/M5/YYYY-MM-DD.json`, so data from different providers never mixes. A day is
 cached only once it is fully in the past, so a partially formed day is never stored. Empty days such
-as weekends are cached too. Missing days are fetched in chunks that stay under OANDA's 5,000-candle limit.
+as weekends are cached too. Missing days are fetched in chunks that stay under the 5,000-candle-per-request limit that both providers enforce.
 Delete the cache folder at any time to force a refetch.
 
 ## Running Frontend
@@ -250,7 +286,7 @@ Shortcuts are ignored while typing in an input. Press Esc first.
 
 ## Limitations
 
-- **Mid prices, no spread, commission, swap or slippage.** Results are optimistic compared with real
+- **Single price feed (no bid/ask), no spread, commission, swap or slippage.** Results are optimistic compared with real
   execution, especially for tight scalping stops on M1/M5.
 - OHLC data hides the path inside a candle. That is why the same-candle rule exists. Lower timeframes reduce
   the ambiguity.
@@ -260,12 +296,12 @@ Shortcuts are ignored while typing in an input. Press Esc first.
 - All times are **UTC**.
 - Sessions are kept in memory. Reloading the page or starting a new session discards the trade journal.
 - Only XAU/USD is configured, although the data layer and UI are instrument-agnostic.
-- With no OANDA key the app cannot load data. There is no offline or sample dataset.
+- With no provider API key the app cannot load data. There is no offline or sample dataset.
 
 ## Future Improvements
 
 - Limit/stop entries, break-even and trailing stops, partial take profits
-- Spread/commission model (OANDA bid/ask candles are available)
+- Spread/commission model
 - Persist sessions and journals (JSON → SQLite/PostgreSQL behind `TradingAccount`/a repository)
 - CSV export of the trade history; screenshots and notes per trade
 - Random-replay mode that hides the date until the session ends
@@ -278,8 +314,8 @@ Shortcuts are ignored while typing in an input. Press Esc first.
 npm test
 ```
 
-- **Server (28 tests):** OANDA normalization, error mapping, the real client against a fake OANDA HTTP
-  server, day-chunking and caching, and API validation.
+- **Server (43 tests):** Twelve Data and OANDA normalization and error mapping (including Twelve Data's
+  HTTP-200 error bodies, "no data" ranges and forming bars), both real clients against fake HTTP servers, day-chunking and caching, and API validation.
 - **Client (79 tests):** replay engine (initial state, next/previous, reset, end of data, speed,
   no-lookahead surface, high-water mark), the playback timer, start-index selection, session
   prefetching, position sizing, SL/TP validation, LONG/SHORT resolution including the spec examples

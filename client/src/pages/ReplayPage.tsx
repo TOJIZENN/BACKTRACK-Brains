@@ -94,7 +94,7 @@ export function ReplayPage({ session, onExit, onJump, jumping, jumpError, onDism
         </span>
         <span
           className="rounded border border-gold/40 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-gold"
-          title="Historical replay only. No orders are sent to OANDA or any broker."
+          title="Historical replay only. No orders are sent to any broker or data provider."
         >
           Simulation
         </span>
@@ -130,7 +130,7 @@ export function ReplayPage({ session, onExit, onJump, jumping, jumpError, onDism
             markers={markers}
             focusKey={snapshot.runId}
           />
-          <TradeToasts key={snapshot.runId} events={snapshot.events} />
+          <TradeToasts key={snapshot.runId} events={snapshot.events} pricePrecision={instrument.pricePrecision} />
           {jumping && (
             <div className="absolute inset-0 z-20 flex items-center justify-center bg-terminal-bg/70">
               <Spinner label="Loading historical candles..." />

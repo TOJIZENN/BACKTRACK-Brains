@@ -3,12 +3,12 @@ import type { Candle, Granularity } from '../types/candle.js';
 import { MS_PER_DAY, toIsoSeconds } from '../utils/time.js';
 import type { CandleCache } from './candleCache.js';
 import { createCandlesService, maxDaysPerUpstreamRequest } from './candles.service.js';
-import type { HistoricalCandleSource } from './oanda/oanda.service.js';
+import type { HistoricalCandleSource } from './candleSource.js';
 
 const DAY = (iso: string) => Date.parse(`${iso}T00:00:00Z`);
 const HOUR_MS = 3_600_000;
 
-/** One H1 candle per hour for the requested range — a stand-in for OANDA. */
+/** One H1 candle per hour for the requested range — a stand-in for the market-data provider. */
 function fakeSource() {
   const fetchCandles = vi.fn(async (_i: string, _g: Granularity, fromMs: number, toMs: number) => {
     const out: Candle[] = [];
@@ -60,7 +60,7 @@ describe('candles service', () => {
     expect(store.get('XAU_USD/H1/2026-01-10')).toHaveLength(24);
   });
 
-  it('serves repeated requests from the cache without calling OANDA', async () => {
+  it('serves repeated requests from the cache without calling the provider', async () => {
     const source = fakeSource();
     const { cache } = memoryCache();
     const service = createCandlesService(source, cache, now);

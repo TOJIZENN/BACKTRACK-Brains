@@ -28,7 +28,7 @@ export async function getJson<T>(path: string, params?: Record<string, string>, 
   } catch (error) {
     if (signal?.aborted) throw error;
     if (timeout.aborted) {
-      throw new ApiError('CLIENT_TIMEOUT', 'The request took too long. The server or OANDA may be slow — please try again.');
+      throw new ApiError('CLIENT_TIMEOUT', 'The request took too long. The server or the market-data provider may be slow — please try again.');
     }
     throw new ApiError('SERVER_UNREACHABLE', 'Cannot reach the backtest server. Is it running (npm run dev)?');
   }

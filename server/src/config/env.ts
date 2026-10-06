@@ -8,8 +8,19 @@ const serverRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '.
 dotenv.config({ path: path.resolve(serverRoot, '../.env'), quiet: true });
 
 const DEFAULT_PORT = 4000;
-const DEFAULT_OANDA_TIMEOUT_MS = 15_000;
+const DEFAULT_UPSTREAM_TIMEOUT_MS = 15_000;
 const DEFAULT_OANDA_BASE_URL = 'https://api-fxpractice.oanda.com';
+const DEFAULT_TWELVE_DATA_BASE_URL = 'https://api.twelvedata.com';
+/** Values from .env.example that mean "not filled in yet". */
+const PLACEHOLDER_KEYS = new Set(['your_api_key', 'your_twelve_data_api_key']);
+
+export const DATA_PROVIDERS = ['twelvedata', 'oanda'] as const;
+export type DataProvider = (typeof DATA_PROVIDERS)[number];
+
+export const DATA_PROVIDER_NAMES: Record<DataProvider, string> = {
+  twelvedata: 'Twelve Data',
+  oanda: 'OANDA',
+};
 
 function readNumber(name: string, fallback: number): number {
   const raw = process.env[name];
@@ -21,28 +32,49 @@ function readNumber(name: string, fallback: number): number {
   return value;
 }
 
+function readProvider(): DataProvider {
+  const raw = (process.env.DATA_PROVIDER?.trim().toLowerCase() || 'twelvedata') as DataProvider;
+  if (!DATA_PROVIDERS.includes(raw)) {
+    throw new Error(`DATA_PROVIDER must be one of ${DATA_PROVIDERS.join(', ')} (got "${process.env.DATA_PROVIDER}")`);
+  }
+  return raw;
+}
+
+const baseUrl = (name: string, fallback: string) => (process.env[name]?.trim() || fallback).replace(/\/+$/, '');
+
 export interface AppConfig {
   port: number;
   cacheDir: string;
-  oanda: {
-    apiKey: string;
-    accountId: string;
-    baseUrl: string;
-    timeoutMs: number;
-  };
+  dataProvider: DataProvider;
+  timeoutMs: number;
+  twelveData: { apiKey: string; baseUrl: string };
+  oanda: { apiKey: string; accountId: string; baseUrl: string };
 }
 
 export const config: AppConfig = {
   port: readNumber('PORT', DEFAULT_PORT),
   cacheDir: path.resolve(serverRoot, process.env.CACHE_DIR || 'cache'),
+  dataProvider: readProvider(),
+  // OANDA_TIMEOUT_MS is still honoured for existing .env files.
+  timeoutMs: readNumber('UPSTREAM_TIMEOUT_MS', readNumber('OANDA_TIMEOUT_MS', DEFAULT_UPSTREAM_TIMEOUT_MS)),
+  twelveData: {
+    apiKey: process.env.TWELVE_DATA_API_KEY?.trim() ?? '',
+    baseUrl: baseUrl('TWELVE_DATA_BASE_URL', DEFAULT_TWELVE_DATA_BASE_URL),
+  },
   oanda: {
     apiKey: process.env.OANDA_API_KEY?.trim() ?? '',
     accountId: process.env.OANDA_ACCOUNT_ID?.trim() ?? '',
-    baseUrl: (process.env.OANDA_BASE_URL?.trim() || DEFAULT_OANDA_BASE_URL).replace(/\/+$/, ''),
-    timeoutMs: readNumber('OANDA_TIMEOUT_MS', DEFAULT_OANDA_TIMEOUT_MS),
+    baseUrl: baseUrl('OANDA_BASE_URL', DEFAULT_OANDA_BASE_URL),
   },
 };
 
-export function isOandaConfigured(): boolean {
-  return config.oanda.apiKey.length > 0 && config.oanda.apiKey !== 'your_api_key';
+const hasKey = (key: string) => key.length > 0 && !PLACEHOLDER_KEYS.has(key);
+
+export function isProviderConfigured(provider: DataProvider = config.dataProvider): boolean {
+  return hasKey(provider === 'twelvedata' ? config.twelveData.apiKey : config.oanda.apiKey);
+}
+
+/** Environment variable holding the active provider's key (for error messages). */
+export function providerKeyVariable(provider: DataProvider = config.dataProvider): string {
+  return provider === 'twelvedata' ? 'TWELVE_DATA_API_KEY' : 'OANDA_API_KEY';
 }

@@ -1,6 +1,7 @@
-import axios, { AxiosError, type AxiosInstance } from 'axios';
-import { config, isOandaConfigured } from '../../config/env.js';
+import axios, { type AxiosError, type AxiosInstance } from 'axios';
+import { config, isProviderConfigured } from '../../config/env.js';
 import { HttpError } from '../../utils/httpError.js';
+import { mapTransportError, missingKeyError } from '../../utils/upstreamErrors.js';
 import type { OandaCandlesQuery, OandaCandlesResponse, OandaErrorResponse } from './oanda.types.js';
 
 /**
@@ -12,21 +13,12 @@ export interface OandaClient {
 }
 
 export function mapOandaError(error: unknown): HttpError {
-  if (error instanceof HttpError) return error;
-  if (!(error instanceof AxiosError)) {
-    return new HttpError(502, 'UPSTREAM_ERROR', 'Unexpected error while contacting OANDA.');
-  }
+  const transport = mapTransportError(error, 'OANDA');
+  if (transport) return transport;
 
-  if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
-    return new HttpError(504, 'UPSTREAM_TIMEOUT', 'OANDA did not respond in time. Please try again.');
-  }
-
-  const status = error.response?.status;
-  const upstreamMessage = (error.response?.data as OandaErrorResponse | undefined)?.errorMessage;
-
-  if (status === undefined) {
-    return new HttpError(503, 'UPSTREAM_UNAVAILABLE', 'Could not reach OANDA. Check your network connection and OANDA_BASE_URL.');
-  }
+  const response = (error as AxiosError).response!;
+  const status = response.status;
+  const upstreamMessage = (response.data as OandaErrorResponse | undefined)?.errorMessage;
   if (status === 401 || status === 403) {
     return new HttpError(
       502,
@@ -52,7 +44,7 @@ export function createOandaClient(http?: AxiosInstance): OandaClient {
     http ??
     axios.create({
       baseURL: config.oanda.baseUrl,
-      timeout: config.oanda.timeoutMs,
+      timeout: config.timeoutMs,
       headers: {
         Authorization: `Bearer ${config.oanda.apiKey}`,
         'Accept-Datetime-Format': 'RFC3339',
@@ -61,13 +53,7 @@ export function createOandaClient(http?: AxiosInstance): OandaClient {
 
   return {
     async getCandles({ instrument, granularity, fromMs, toMs }) {
-      if (!http && !isOandaConfigured()) {
-        throw new HttpError(
-          503,
-          'CONFIG_MISSING',
-          'OANDA_API_KEY is not configured on the server. Copy .env.example to .env, add your key and restart the server.',
-        );
-      }
+      if (!http && !isProviderConfigured('oanda')) throw missingKeyError('OANDA', 'OANDA_API_KEY');
       try {
         const response = await instance.get<OandaCandlesResponse>(
           `/v3/instruments/${encodeURIComponent(instrument)}/candles`,

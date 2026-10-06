@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import type { TradeEvent } from '../store/replaySession';
-import { formatR, formatSignedMoney } from '../utils/format';
+import { formatPrice, formatR, formatSignedMoney } from '../utils/format';
 
 const TOAST_DURATION_MS = 4000;
 
 const REASON_TEXT = { STOP_LOSS: 'Stop loss hit', TAKE_PROFIT: 'Take profit hit', MANUAL: 'Closed manually' } as const;
 
 /** Short-lived notifications for trades opened/closed by the session. Remount (key) on replay reset. */
-export function TradeToasts({ events }: { events: readonly TradeEvent[] }) {
+export function TradeToasts({ events, pricePrecision }: { events: readonly TradeEvent[]; pricePrecision: number }) {
   const [visible, setVisible] = useState<TradeEvent[]>([]);
   const lastSeen = useRef(events.at(-1)?.id ?? 0);
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
@@ -38,7 +38,7 @@ export function TradeToasts({ events }: { events: readonly TradeEvent[] }) {
         if (kind === 'opened') {
           return (
             <div key={id} className="rounded-md border border-terminal-border bg-terminal-raised/95 px-3 py-2 text-xs shadow-lg">
-              <span className="font-semibold">{label}</span> opened @ <span className="font-mono">{trade.entryPrice}</span>
+              <span className="font-semibold">{label}</span> opened @ <span className="font-mono">{formatPrice(trade.entryPrice, pricePrecision)}</span>
             </div>
           );
         }

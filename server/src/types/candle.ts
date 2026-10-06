@@ -1,4 +1,4 @@
-/** Internal candle format. Everything outside services/oanda works with this shape only. */
+/** Internal candle format. Provider-specific shapes (services/oanda, services/twelvedata) never leave their folders. */
 export interface Candle {
   /** Candle open time, ISO-8601 UTC, e.g. "2026-01-15T10:05:00Z" */
   timestamp: string;

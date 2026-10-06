@@ -61,11 +61,11 @@ describe('ReplaySession', () => {
 
   it('reports prefetch errors without crashing', async () => {
     const fetcher = vi.fn<CandleFetcher>(async () => {
-      throw new Error('OANDA is temporarily unavailable.');
+      throw new Error('Twelve Data is temporarily unavailable.');
     });
     const session = new ReplaySession(setup, makeCandles(3), 1, 0, fetcher, FAR_FUTURE);
     await flush();
-    expect(session.getSnapshot().error).toContain('OANDA is temporarily unavailable.');
+    expect(session.getSnapshot().error).toContain('Twelve Data is temporarily unavailable.');
   });
 });
 
