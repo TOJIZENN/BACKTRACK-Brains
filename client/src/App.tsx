@@ -1,21 +1,33 @@
-import { useEffect, useState } from 'react'
-import { CandleChartView } from './components/CandleChartView'
-import { fetchCandles } from './services/candles'
-import type { Candle } from './types/market'
+import { useEffect, useRef, useState } from 'react';
+import { ReplayPage } from './pages/ReplayPage';
+import { SetupPage } from './pages/SetupPage';
+import { loadReplaySession } from './services/sessionLoader';
+import type { ReplaySession } from './store/replaySession';
+import type { SessionSetup } from './types/session';
 
-// Temporary Phase 3 harness: renders two days of M5 data.
 export default function App() {
-  const [candles, setCandles] = useState<Candle[]>([])
-  const [error, setError] = useState('')
-  useEffect(() => {
-    fetchCandles('XAU_USD', 'M5', Date.parse('2026-09-14T00:00:00Z'), Date.parse('2026-09-16T00:00:00Z'))
-      .then(setCandles)
-      .catch((e: Error) => setError(e.message))
-  }, [])
-  return (
-    <div className="flex h-full flex-col">
-      <div className="p-2 text-sm">{error || `${candles.length} candles`}</div>
-      <div className="flex-1"><CandleChartView candles={candles} pricePrecision={3} focusKey={candles.length} /></div>
-    </div>
-  )
+  const [session, setSession] = useState<ReplaySession | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const requestId = useRef(0);
+
+  useEffect(() => () => session?.dispose(), [session]);
+
+  const start = async (setup: SessionSetup) => {
+    const id = ++requestId.current;
+    setLoading(true);
+    setError(null);
+    try {
+      const next = await loadReplaySession(setup);
+      if (id !== requestId.current) return next.dispose();
+      setSession(next);
+    } catch (err) {
+      if (id === requestId.current) setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      if (id === requestId.current) setLoading(false);
+    }
+  };
+
+  if (session) return <ReplayPage key={session.setup.startMs} session={session} onExit={() => setSession(null)} />;
+  return <SetupPage onStart={start} loading={loading} error={error} onDismissError={() => setError(null)} />;
 }
