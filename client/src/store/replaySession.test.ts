@@ -59,6 +59,41 @@ describe('ReplaySession', () => {
     expect(session.getSnapshot().dataExhausted).toBe(true);
   });
 
+  it('backs off after a failed prefetch and retries when Next is pressed at the end of the data', async () => {
+    let fail = true;
+    const fetcher = vi.fn<CandleFetcher>(async () => {
+      if (fail) throw new Error('Twelve Data rate limit reached.');
+      return [makeCandle(3), makeCandle(4)];
+    });
+    const session = new ReplaySession(setup, makeCandles(3), 1, 0, fetcher, FAR_FUTURE);
+    await flush();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    session.next(); // reveals candle 2 — automatic retry is suppressed by the backoff
+    await flush();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(session.getSnapshot().canAdvance).toBe(true);
+
+    fail = false;
+    session.next(); // end of loaded data → explicit retry
+    await flush();
+    // The retry succeeds; further calls are the normal end-of-data probing (empty windows).
+    expect(fetcher.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(session.getSnapshot().error).toBeNull();
+    session.next();
+    expect(session.getSnapshot().replay.currentIndex).toBe(3);
+  });
+
+  it('retryLoadMore() retries immediately', async () => {
+    const fetcher = vi.fn<CandleFetcher>(async () => {
+      throw new Error('offline');
+    });
+    const session = new ReplaySession(setup, makeCandles(3), 1, 0, fetcher, FAR_FUTURE);
+    await flush();
+    session.retryLoadMore();
+    await flush();
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
   it('reports prefetch errors without crashing', async () => {
     const fetcher = vi.fn<CandleFetcher>(async () => {
       throw new Error('Twelve Data is temporarily unavailable.');

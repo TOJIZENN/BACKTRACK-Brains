@@ -4,8 +4,10 @@ import dotenv from 'dotenv';
 
 const serverRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
-// The single .env lives at the repository root (next to .env.example).
-dotenv.config({ path: path.resolve(serverRoot, '../.env'), quiet: true });
+// .env normally lives at the repository root (next to .env.example); server/.env is also accepted.
+// When both exist, values from the root file win (dotenv never overrides already-set variables).
+export const ENV_FILE_CANDIDATES = [path.resolve(serverRoot, '../.env'), path.resolve(serverRoot, '.env')];
+export const loadedEnvFiles = ENV_FILE_CANDIDATES.filter((file) => !dotenv.config({ path: file, quiet: true }).error);
 
 const DEFAULT_PORT = 4000;
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 15_000;

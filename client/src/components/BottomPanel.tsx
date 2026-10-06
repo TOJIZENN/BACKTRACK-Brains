@@ -43,7 +43,7 @@ export function BottomPanel({ snapshot, instrument }: Props) {
         </span>
       </button>
       {open && (
-        <div className="grid h-72 grid-cols-[minmax(240px,270px)_1fr_minmax(260px,340px)] gap-4 border-t border-terminal-border px-4 py-3 max-lg:h-auto max-lg:grid-cols-1">
+        <div className="grid h-[clamp(170px,30vh,288px)] grid-cols-[minmax(240px,270px)_1fr_minmax(260px,340px)] gap-4 border-t border-terminal-border px-4 py-3 max-lg:h-auto max-lg:grid-cols-1">
           <div className="overflow-y-auto">
             <AccountStats stats={stats} />
           </div>

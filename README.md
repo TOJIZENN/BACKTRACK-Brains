@@ -129,7 +129,9 @@ never sees it. Only historical candle endpoints are implemented; there is no cod
 
 ## Environment Variables
 
-Copy `.env.example` to `.env` in the repository root (`.env` is git-ignored):
+Copy `.env.example` to `.env` in the repository root (`.env` is git-ignored). A `server/.env` is
+also accepted; if both exist, the root file wins. The server logs which file it loaded on startup, and
+`npm run dev` restarts the server automatically when `.env` changes.
 
 | Variable               | Required             | Description                                                     |
 | ---------------------- | -------------------- | --------------------------------------------------------------- |
@@ -176,6 +178,15 @@ codes such as `CONFIG_MISSING`, `INVALID_CREDENTIALS`, `RATE_LIMITED`, `UPSTREAM
 cached only once it is fully in the past, so a partially formed day is never stored. Empty days such
 as weekends are cached too. Missing days are fetched in chunks that stay under the 5,000-candle-per-request limit that both providers enforce.
 Delete the cache folder at any time to force a refetch.
+
+### Troubleshooting
+
+| Symptom | Fix |
+| ------- | --- |
+| Error mentions **`OANDA_API_KEY`** although you use Twelve Data | You are running code from before the Twelve Data switch: `git pull`, then restart `npm run dev`. Also check that `.env` says `DATA_PROVIDER=twelvedata`. |
+| `TWELVE_DATA_API_KEY is not configured` | The server didn't find your `.env`. Check the startup log line `Loaded settings from …` and put `.env` in the repo root. |
+| `RATE_LIMITED` | Free plan allows 8 requests/minute. Wait a minute; cached days don't count against the limit. |
+| `Could not load more candles` during a replay | Press **Retry** on the banner, or Next/Play at the end of the loaded data. Automatic retries back off for 15 s. |
 
 ## Running Frontend
 

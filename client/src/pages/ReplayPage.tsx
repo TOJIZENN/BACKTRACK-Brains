@@ -116,7 +116,12 @@ export function ReplayPage({ session, onExit, onJump, jumping, jumpError, onDism
 
       {(snapshot.error || jumpError) && (
         <div className="flex flex-col gap-2 px-4 pt-2">
-          {snapshot.error && <ErrorBanner message={snapshot.error} />}
+          {snapshot.error && (
+            <ErrorBanner
+              message={snapshot.error}
+              action={snapshot.loadingMore ? undefined : { label: 'Retry', onClick: () => session.retryLoadMore() }}
+            />
+          )}
           {jumpError && <ErrorBanner title="Could not jump" message={jumpError} onDismiss={onDismissJumpError} />}
         </div>
       )}

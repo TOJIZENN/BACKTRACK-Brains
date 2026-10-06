@@ -63,6 +63,10 @@ describe('validateStops', () => {
     expect(validateStops('SHORT', 100, 105, 90)).toBeNull();
   });
 
+  it('formats the entry with the given display precision', () => {
+    expect(validateStops('LONG', 2625.88791, 2626, 2630, 3)).toBe('BUY: stop loss must be below entry (2625.888).');
+  });
+
   it.each([
     ['LONG', 100, 101, 110, 'stop loss must be below'],
     ['LONG', 100, 100, 110, 'stop loss must be below'],

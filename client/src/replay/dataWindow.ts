@@ -20,5 +20,12 @@ export const DATA_WINDOWS: Record<Granularity, DataWindow> = {
 /** Prefetch more forward data once fewer than this many unrevealed candles remain loaded. */
 export const PREFETCH_THRESHOLD_CANDLES = 200;
 
+/**
+ * After a failed forward fetch, automatic retries wait this long, so a provider outage or rate limit
+ * (Twelve Data free plan: 8 requests/minute) is not hammered on every candle. Next/Play at the end of
+ * the loaded data, or the Retry button, retry immediately.
+ */
+export const PREFETCH_RETRY_BACKOFF_MS = 15_000;
+
 /** Consecutive empty forward windows tolerated (e.g. long holidays) before declaring end of data. */
 export const MAX_EMPTY_FORWARD_FETCHES = 3;

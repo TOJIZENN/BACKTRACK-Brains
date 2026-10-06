@@ -22,9 +22,9 @@ export function TradingPanel({ snapshot, ticket, instrument, onClosePosition }: 
   const price = (v: number) => formatPrice(v, instrument.pricePrecision);
 
   return (
-    <aside className="flex w-80 shrink-0 flex-col gap-4 overflow-y-auto border-l border-terminal-border bg-terminal-panel p-4 max-lg:w-full max-lg:border-l-0 max-lg:border-t">
+    <aside className="flex w-80 shrink-0 flex-col gap-4 overflow-y-auto border-l border-terminal-border bg-terminal-panel px-4 py-3 max-lg:w-full max-lg:border-l-0 max-lg:border-t">
       <section>
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-terminal-muted">Order ticket</h2>
+        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-terminal-muted">Order ticket</h2>
         <div className="flex flex-col gap-3">
           <div className="grid grid-cols-2 gap-3">
             <Field label="Risk (%)" htmlFor="ticket-risk">
@@ -49,6 +49,7 @@ export function TradingPanel({ snapshot, ticket, instrument, onClosePosition }: 
               />
             </Field>
           </div>
+          <div className="grid grid-cols-2 gap-3">
           <Field label="Stop loss" htmlFor="ticket-sl">
             <input
               id="ticket-sl"
@@ -71,9 +72,10 @@ export function TradingPanel({ snapshot, ticket, instrument, onClosePosition }: 
               onChange={(e) => update('takeProfit', e.target.value)}
             />
           </Field>
+          </div>
         </div>
 
-        <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-md border border-terminal-border bg-terminal-bg p-3 text-sm">
+        <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 rounded-md border border-terminal-border bg-terminal-bg p-3 text-sm">
           <dt className="text-terminal-muted">Risk amount</dt>
           <dd className="text-right font-mono" data-testid="ticket-risk-amount">
             {showNumbers ? formatMoney(preview.riskAmount) : formatMoney(preview.riskBudget)}
@@ -89,7 +91,7 @@ export function TradingPanel({ snapshot, ticket, instrument, onClosePosition }: 
         </dl>
         {impliedSide && preview.error && <p className="mt-2 text-xs text-gold">{preview.error}</p>}
 
-        <div className="mt-4 grid grid-cols-2 gap-2">
+        <div className="mt-3 grid grid-cols-2 gap-2">
           <Button
             variant="buy"
             className="py-2.5"

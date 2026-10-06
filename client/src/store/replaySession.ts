@@ -1,4 +1,9 @@
-import { DATA_WINDOWS, MAX_EMPTY_FORWARD_FETCHES, PREFETCH_THRESHOLD_CANDLES } from '../replay/dataWindow';
+import {
+  DATA_WINDOWS,
+  MAX_EMPTY_FORWARD_FETCHES,
+  PREFETCH_RETRY_BACKOFF_MS,
+  PREFETCH_THRESHOLD_CANDLES,
+} from '../replay/dataWindow';
 import { ReplayEngine, type ReplaySpeed, type ReplayState } from '../replay/replayEngine';
 import { ReplayPlayer } from '../replay/replayPlayer';
 import { computeStats, type AccountStats } from '../trading/statistics';
@@ -20,6 +25,8 @@ export interface ReplaySnapshot {
   loadingMore: boolean;
   /** No more historical data exists after the loaded range. */
   dataExhausted: boolean;
+  /** A next candle exists, or may still be loaded (more data exists / a fetch is pending or retryable). */
+  canAdvance: boolean;
   /** Last background error (e.g. prefetch failed) */
   error: string | null;
   /** Increments on every reset, so views can re-center. */
@@ -56,6 +63,8 @@ export class ReplaySession {
   #loadingMore = false;
   #dataExhausted = false;
   #error: string | null = null;
+  /** Automatic prefetch retries are suppressed until this time after a failure. */
+  #retryAfterMs = 0;
   #disposed = false;
   #playing = false;
   #runId = 0;
@@ -97,7 +106,12 @@ export class ReplaySession {
 
   next(): void {
     this.pause();
-    if (this.#step()) this.#emit();
+    if (this.#step()) {
+      this.#emit();
+    } else {
+      // At the end of the loaded data: an explicit Next retries loading more right away.
+      this.#maybePrefetch(true);
+    }
   }
 
   previous(): void {
@@ -107,7 +121,10 @@ export class ReplaySession {
 
   play(): void {
     if (this.#playing) return;
-    if (!this.#engine.hasNext() && !this.#loadingMore) return;
+    if (!this.#engine.hasNext()) {
+      this.#maybePrefetch(true);
+      if (!this.#loadingMore) return;
+    }
     this.#playing = true;
     this.#player.start();
     this.#emit();
@@ -118,6 +135,11 @@ export class ReplaySession {
     this.#playing = false;
     this.#player.stop();
     this.#emit();
+  }
+
+  /** Retries loading forward data immediately (e.g. after a network or rate-limit error). */
+  retryLoadMore(): void {
+    this.#maybePrefetch(true);
   }
 
   togglePlay(): void {
@@ -227,9 +249,11 @@ export class ReplaySession {
     return this.#playing;
   }
 
-  #maybePrefetch(): void {
+  /** Fetches the next forward window when the buffer runs low. `force` skips the post-error backoff. */
+  #maybePrefetch(force = false): void {
     if (this.#loadingMore || this.#dataExhausted || this.#disposed) return;
     if (this.#engine.bufferedAhead() >= PREFETCH_THRESHOLD_CANDLES) return;
+    if (!force && this.#now() < this.#retryAfterMs) return;
 
     const fromMs = this.#loadedUntilMs;
     const toMs = Math.min(fromMs + DATA_WINDOWS[this.setup.granularity].aheadMs, this.#now());
@@ -244,6 +268,7 @@ export class ReplaySession {
         if (this.#disposed) return;
         this.#loadedUntilMs = toMs;
         this.#error = null;
+        this.#retryAfterMs = 0;
         if (this.#engine.appendCandles(candles) === 0) {
           this.#emptyForwardFetches += 1;
           if (this.#emptyForwardFetches >= MAX_EMPTY_FORWARD_FETCHES) this.#dataExhausted = true;
@@ -254,7 +279,7 @@ export class ReplaySession {
       .catch((error: unknown) => {
         if (this.#disposed) return;
         this.#error = `Could not load more candles: ${error instanceof Error ? error.message : String(error)}`;
-        // Stop retrying in a loop; the user can press Next/Play to try again.
+        this.#retryAfterMs = this.#now() + PREFETCH_RETRY_BACKOFF_MS;
       })
       .finally(() => {
         if (this.#disposed) return;
@@ -281,6 +306,7 @@ export class ReplaySession {
       currentCandle,
       loadingMore: this.#loadingMore,
       dataExhausted: this.#dataExhausted && !this.#engine.hasNext(),
+      canAdvance: this.#engine.hasNext() || !this.#dataExhausted,
       error: this.#error,
       runId: this.#runId,
       trades,

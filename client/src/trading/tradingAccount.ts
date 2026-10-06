@@ -75,7 +75,7 @@ export class TradingAccount {
   previewOrder(order: OrderRequest, entryPrice: number): OrderPreview {
     const riskBudget = riskAmountFor(this.getBalance(), order.riskPercent);
     const size = calculatePositionSize(entryPrice, order.stopLoss, riskBudget, this.#instrument);
-    let error = validateStops(order.side, entryPrice, order.stopLoss, order.takeProfit);
+    let error = validateStops(order.side, entryPrice, order.stopLoss, order.takeProfit, this.#instrument.pricePrecision);
     if (!error && !(order.riskPercent > 0)) error = 'Risk per trade must be greater than 0%.';
     if (!error && size.quantity <= 0) error = 'Risk amount is too small for this stop distance (position size rounds to 0).';
     return {

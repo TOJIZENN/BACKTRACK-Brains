@@ -64,7 +64,7 @@ export function SetupPage({ onStart, loading, error, onDismissError }: Props) {
 
   return (
     <div className="flex min-h-full items-center justify-center p-6">
-      <form onSubmit={submit} className="w-full max-w-lg rounded-xl border border-terminal-border bg-terminal-panel p-8 shadow-2xl">
+      <form onSubmit={submit} noValidate className="w-full max-w-lg rounded-xl border border-terminal-border bg-terminal-panel p-5 shadow-2xl sm:p-8">
         <div className="mb-6">
           <h1 className="text-xl font-semibold">
             <span className="text-gold">BACKTRACK</span> · Replay setup
@@ -85,7 +85,7 @@ export function SetupPage({ onStart, loading, error, onDismissError }: Props) {
           </div>
         )}
 
-        <fieldset disabled={loading} className="grid grid-cols-2 gap-4">
+        <fieldset disabled={loading} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Instrument" htmlFor="instrument">
             <select id="instrument" className={inputClass} value={values.instrument} onChange={(e) => update('instrument', e.target.value)}>
               {Object.values(INSTRUMENTS).map((i) => (
@@ -97,7 +97,7 @@ export function SetupPage({ onStart, loading, error, onDismissError }: Props) {
           </Field>
 
           <Field label="Timeframe">
-            <div className="grid grid-cols-4 gap-1 rounded-md border border-terminal-border bg-terminal-bg p-1" role="radiogroup">
+            <div className="grid grid-cols-4 gap-1 rounded-md border border-terminal-border bg-terminal-bg p-1" role="radiogroup" aria-label="Timeframe">
               {GRANULARITIES.map((g) => (
                 <button
                   key={g}
@@ -121,7 +121,7 @@ export function SetupPage({ onStart, loading, error, onDismissError }: Props) {
             <input id="time" type="time" className={inputClass} value={values.time} onChange={(e) => update('time', e.target.value)} />
           </Field>
 
-          <div className="col-span-2 -mt-2">
+          <div className="-mt-2 sm:col-span-2">
             <button
               type="button"
               className="text-xs text-terminal-muted underline-offset-2 hover:text-gold hover:underline"
@@ -155,7 +155,7 @@ export function SetupPage({ onStart, loading, error, onDismissError }: Props) {
             />
           </Field>
 
-          <div className="col-span-2">
+          <div className="sm:col-span-2">
             <Field
               label="Same-candle rule"
               htmlFor="rule"
