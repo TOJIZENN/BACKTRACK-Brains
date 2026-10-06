@@ -1,6 +1,7 @@
 import { DATA_WINDOWS } from '../replay/dataWindow';
 import { findStartIndex } from '../replay/startIndex';
 import { ReplaySession, type CandleFetcher } from '../store/replaySession';
+import type { TradingAccount } from '../trading/tradingAccount';
 import { GRANULARITY_SECONDS } from '../types/market';
 import type { SessionSetup } from '../types/session';
 import { formatDateTimeUtc } from '../utils/format';
@@ -19,6 +20,8 @@ export async function loadReplaySession(
   setup: SessionSetup,
   fetcher: CandleFetcher = fetchCandles,
   now: () => number = Date.now,
+  /** Carry an existing account (balance + history) into the new session, e.g. Jump to date. */
+  account?: TradingAccount,
 ): Promise<ReplaySession> {
   const nowMs = now();
   if (!Number.isFinite(setup.startMs)) throw new SessionLoadError('Please choose a valid start date and time.');
@@ -40,5 +43,5 @@ export async function loadReplaySession(
   if (startIndex === candles.length - 1) {
     throw new SessionLoadError(`No candles after ${when} to replay. Choose an earlier start time.`);
   }
-  return new ReplaySession(setup, candles, startIndex, toMs, fetcher, now);
+  return new ReplaySession(setup, candles, startIndex, toMs, fetcher, now, account);
 }

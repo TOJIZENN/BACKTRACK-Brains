@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
+import { fetchHealth } from '../services/health';
 import { Button } from '../components/ui/Button';
 import { ErrorBanner } from '../components/ui/ErrorBanner';
 import { Field, inputClass } from '../components/ui/Field';
@@ -26,6 +27,21 @@ interface Props {
 export function SetupPage({ onStart, loading, error, onDismissError }: Props) {
   const [values, setValues] = useState<SetupFormValues>(() => loadSavedSetup() ?? defaultSetupValues());
   const [errors, setErrors] = useState<SetupFormErrors>({});
+  const [serverWarning, setServerWarning] = useState<string | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchHealth(controller.signal)
+      .then((health) => {
+        if (!health.oandaConfigured) {
+          setServerWarning('OANDA_API_KEY is not configured on the server. Add it to .env and restart the server to load candles.');
+        }
+      })
+      .catch((err: unknown) => {
+        if (!controller.signal.aborted) setServerWarning(err instanceof Error ? err.message : String(err));
+      });
+    return () => controller.abort();
+  }, []);
 
   const update = <K extends keyof SetupFormValues>(key: K, value: SetupFormValues[K]) =>
     setValues((prev) => ({ ...prev, [key]: value }));
@@ -53,6 +69,12 @@ export function SetupPage({ onStart, loading, error, onDismissError }: Props) {
             Manual historical replay. Simulation only — no live orders are ever placed.
           </p>
         </div>
+
+        {serverWarning && (
+          <div className="mb-5">
+            <ErrorBanner title="Server" message={serverWarning} />
+          </div>
+        )}
 
         <fieldset disabled={loading} className="grid grid-cols-2 gap-4">
           <Field label="Instrument" htmlFor="instrument">

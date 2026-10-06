@@ -22,7 +22,7 @@ export function TradingPanel({ snapshot, ticket, instrument, onClosePosition }: 
   const price = (v: number) => formatPrice(v, instrument.pricePrecision);
 
   return (
-    <aside className="flex w-80 shrink-0 flex-col gap-4 overflow-y-auto border-l border-terminal-border bg-terminal-panel p-4">
+    <aside className="flex w-80 shrink-0 flex-col gap-4 overflow-y-auto border-l border-terminal-border bg-terminal-panel p-4 max-lg:w-full max-lg:border-l-0 max-lg:border-t">
       <section>
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-terminal-muted">Order ticket</h2>
         <div className="flex flex-col gap-3">
