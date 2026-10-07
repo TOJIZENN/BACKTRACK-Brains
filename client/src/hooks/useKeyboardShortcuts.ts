@@ -9,7 +9,9 @@ export const SHORTCUTS: { keys: string; action: string }[] = [
   { keys: 'R', action: 'Reset replay' },
   { keys: 'B', action: 'Buy (uses order ticket SL/TP)' },
   { keys: 'S', action: 'Sell (uses order ticket SL/TP)' },
-  { keys: 'Esc', action: 'Close dialog / leave input' },
+  { keys: 'Esc', action: 'Close dialog / leave input / cancel drawing' },
+  { keys: 'Del', action: 'Delete selected drawing' },
+  { keys: 'Enter', action: 'Finish path drawing (or double-click)' },
 ];
 
 function isTypingTarget(target: EventTarget | null): boolean {

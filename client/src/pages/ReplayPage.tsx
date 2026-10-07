@@ -1,4 +1,11 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import type { CandleChart } from '../chart/candleChart';
+import type { Drawing, DrawingTool } from '../chart/drawings/types';
+import { ChartSettingsDialog } from '../components/ChartSettingsDialog';
+import { DrawingStyleBar } from '../components/DrawingStyleBar';
+import { DrawingToolbar } from '../components/DrawingToolbar';
+import { useChartSettings } from '../hooks/useChartSettings';
+import { GRANULARITY_SECONDS } from '../types/market';
 import { BottomPanel } from '../components/BottomPanel';
 import { CandleChartView } from '../components/CandleChartView';
 import { JumpToDate } from '../components/JumpToDate';
@@ -21,7 +28,7 @@ import { INSTRUMENTS } from '../types/market';
 import { TimeZoneContext } from '../hooks/useTimeZone';
 import { TIME_ZONES } from '../utils/timezone';
 
-type Dialog = 'help' | 'confirmReset' | 'confirmExit' | 'jump' | null;
+type Dialog = 'help' | 'confirmReset' | 'confirmExit' | 'jump' | 'settings' | null;
 
 interface Props {
   session: ReplaySession;
@@ -36,6 +43,14 @@ export function ReplayPage({ session, onExit, onJump, jumping, jumpError, onDism
   const snapshot = useReplaySnapshot(session);
   const ticket = useOrderTicket(session);
   const [dialog, setDialog] = useState<Dialog>(null);
+  const [chartSettings, setChartSettings] = useChartSettings();
+  const chartRef = useRef<CandleChart | null>(null);
+  // Drawings live with this session (a new session or jump starts clean, so no lines drawn
+  // with knowledge of a later period leak into an earlier replay). Reset keeps them.
+  const [tool, setTool] = useState<DrawingTool>('cursor');
+  const [drawings, setDrawings] = useState<Drawing[]>([]);
+  const [selectedDrawingId, setSelectedDrawingId] = useState<string | null>(null);
+  const selectedDrawing = drawings.find((d) => d.id === selectedDrawingId) ?? null;
   const { setup } = session;
   const instrument = INSTRUMENTS[setup.instrument];
 
@@ -111,6 +126,9 @@ export function ReplayPage({ session, onExit, onJump, jumping, jumpError, onDism
           <Button variant="ghost" onClick={() => setDialog('jump')} disabled={jumping}>
             Jump to date
           </Button>
+          <Button variant="ghost" onClick={() => setDialog('settings')} title="Chart settings" aria-label="Chart settings">
+            <Icon name="settings" />
+          </Button>
           <Button variant="ghost" onClick={() => setDialog('help')} title="Keyboard shortcuts" aria-label="Keyboard shortcuts">
             <Icon name="keyboard" />
           </Button>
@@ -133,15 +151,32 @@ export function ReplayPage({ session, onExit, onJump, jumping, jumpError, onDism
       )}
 
       <main className="flex min-h-0 flex-1 max-lg:flex-col">
-        <section className="relative min-w-0 flex-1 max-lg:h-[60vh] max-lg:flex-none">
+        <div className="flex min-w-0 flex-1 max-lg:h-[60vh] max-lg:flex-none">
+        <DrawingToolbar tool={tool} onToolChange={setTool} onClearAll={() => chartRef.current?.clearDrawings()} hasDrawings={drawings.length > 0} />
+        <section className="relative min-w-0 flex-1">
           <CandleChartView
             candles={snapshot.visibleCandles}
             pricePrecision={instrument.pricePrecision}
             timeZone={setup.timeZone}
+            barSeconds={GRANULARITY_SECONDS[setup.granularity]}
+            settings={chartSettings}
             priceLines={priceLines}
             markers={markers}
             focusKey={snapshot.runId}
+            tool={tool}
+            drawings={drawings}
+            onToolChange={setTool}
+            onDrawingsChange={setDrawings}
+            onSelectionChange={setSelectedDrawingId}
+            chartRef={chartRef}
           />
+          {selectedDrawing && (
+            <DrawingStyleBar
+              drawing={selectedDrawing}
+              onStyle={(style) => chartRef.current?.setDrawingStyle(style)}
+              onDelete={() => chartRef.current?.deleteSelectedDrawing()}
+            />
+          )}
           <TradeToasts key={snapshot.runId} events={snapshot.events} pricePrecision={instrument.pricePrecision} />
           {jumping && (
             <div className="absolute inset-0 z-20 flex items-center justify-center bg-terminal-bg/70">
@@ -149,6 +184,7 @@ export function ReplayPage({ session, onExit, onJump, jumping, jumpError, onDism
             </div>
           )}
         </section>
+        </div>
         <TradingPanel snapshot={snapshot} ticket={ticket} instrument={instrument} onClosePosition={closePosition} />
       </main>
 
@@ -163,6 +199,7 @@ export function ReplayPage({ session, onExit, onJump, jumping, jumpError, onDism
       <BottomPanel snapshot={snapshot} instrument={instrument} />
 
       {dialog === 'help' && <ShortcutsHelp onClose={closeDialog} />}
+      {dialog === 'settings' && <ChartSettingsDialog settings={chartSettings} onChange={setChartSettings} onClose={closeDialog} />}
       {dialog === 'jump' && (
         <JumpToDate
           initialMs={setup.startMs}

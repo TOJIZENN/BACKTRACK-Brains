@@ -32,6 +32,10 @@ It is **not** an automated strategy tester: every trading decision is made by yo
 - Keyboard shortcuts, toasts for opened/closed trades, clear error messages
 - TradingView **Lightweight Charts** with zoom, pan, crosshair and auto-scaling, and no indicators by design
 - TradingView dark colour theme (`#131722` background, `#089981` / `#f23645` candles, `#2962ff` accent)
+- **Chart settings** like TradingView: candle body / border / wick colours (up & down), background, grid,
+  crosshair and scale text, plus presets (TradingView dark/light, classic, monochrome). Saved in the browser
+- **Drawing tools**: trend line, ray, horizontal line, vertical line, rectangle, path and Fib retracement;
+  select, drag, recolour, change width, delete
 
 ## Architecture
 
@@ -213,6 +217,44 @@ Only display and input change. Requests to the server, the candle cache and all 
 so switching zones never changes which candles you get. For example, a 15:30 IST start is the same replay
 as a 10:00 UTC start. Zones with daylight saving are handled per timestamp. IST has none.
 
+## Chart Settings
+
+Open **Chart settings** (sliders icon in the header). Changes apply live and are remembered in this browser.
+
+- **Symbol:** candle body, border and wick colours for up and down candles. Borders and wicks can each be switched off.
+- **Canvas:** background, grid lines (on/off and colour), crosshair and scale text colours.
+- **Presets:** TradingView dark (default), TradingView light, Classic green/red and Monochrome.
+  **Reset to defaults** restores TradingView dark.
+
+## Drawing Tools
+
+The toolbar on the left of the chart works like TradingView's:
+
+| Tool | How to draw |
+| ---- | ----------- |
+| Trend line | click two points |
+| Ray | click two points; extends to the right edge |
+| Horizontal line | click once (shows its price on the right) |
+| Vertical line | click once |
+| Rectangle | click two opposite corners |
+| Path | click to add points; double-click or Enter to finish |
+| Fib retracement | click the swing start, then the swing end (0 – 0.236 – 0.382 – 0.5 – 0.618 – 0.786 – 1) |
+
+After a drawing is placed, the tool switches back to the cursor and the drawing is selected. In cursor mode:
+
+- click a drawing to select it
+- drag its round handles to move a point, or drag the line itself to move the whole drawing
+- use the floating bar to change colour (8 TradingView colours + custom) or line width
+- press **Delete** or **Backspace** to remove it; **Esc** cancels a drawing in progress
+- the trash icon removes all drawings
+
+Drawings are anchored to **time and price**, not screen pixels, so they stay in place when you zoom, pan, or
+reveal new candles. You can draw into the empty area to the right of the latest candle; that area holds no
+data, so nothing is revealed. Drawings belong to the current session and survive **Reset**. **New session**
+and **Jump to date** start with a clean chart, so lines drawn with knowledge of a later period never appear
+in an earlier replay. Placing or dragging a drawing never pans the chart. Clicking empty chart space still
+pans as usual.
+
 ## Replay Engine Explanation
 
 `client/src/replay/replayEngine.ts` is the core of the app.
@@ -306,7 +348,9 @@ R multiple    = P&L ÷ risk amount                                (+$200 → +2R
 | ←         | Previous candle                      |
 | R         | Reset replay (asks to confirm if there are trades) |
 | B / S     | Buy / Sell using the order ticket's SL & TP |
-| Esc       | Close dialog / leave the focused input |
+| Esc       | Close dialog / leave the focused input / cancel a drawing |
+| Del / Backspace | Delete the selected drawing |
+| Enter     | Finish a path drawing |
 
 Shortcuts are ignored while typing in an input. Press Esc first.
 

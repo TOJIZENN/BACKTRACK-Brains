@@ -16,6 +16,10 @@ import {
 import type { Candle } from '../types/market';
 import { CHART_COLORS } from './theme';
 import { timeZoneOffsetMs } from '../utils/timezone';
+import { DEFAULT_CHART_SETTINGS, type ChartSettings } from './chartSettings';
+import { DrawingController, type DrawingCallbacks } from './drawings/drawingController';
+import { DrawingLayer } from './drawings/drawingLayer';
+import type { Drawing, DrawingTool } from './drawings/types';
 
 export interface ChartPriceLine {
   id: string;
@@ -23,6 +27,16 @@ export interface ChartPriceLine {
   color: string;
   title: string;
   dashed?: boolean;
+}
+
+export interface CandleChartOptions {
+  pricePrecision: number;
+  /** Display zone; see the constructor note. */
+  timeZone: string;
+  /** Bar duration, used to place drawings in the future area beyond the last candle. */
+  barSeconds: number;
+  settings?: ChartSettings;
+  drawingCallbacks: DrawingCallbacks;
 }
 
 export interface ChartMarker {
@@ -45,12 +59,15 @@ export class CandleChart {
   #lastTime: number | null = null;
   #count = 0;
   readonly #timeZone: string;
+  readonly #drawingLayer: DrawingLayer;
+  readonly #drawings: DrawingController;
 
   /**
-   * @param timeZone Display zone. Lightweight Charts formats timestamps as UTC, so bar times are
-   *   shifted by the zone's offset (per bar, so daylight saving is respected) — display only.
+   * Display zone: Lightweight Charts formats timestamps as UTC, so bar times are shifted by the
+   * zone's offset (per bar, so daylight saving is respected) — display only. Drawings are anchored
+   * to the real UTC bar times and are unaffected.
    */
-  constructor(container: HTMLElement, pricePrecision: number, timeZone: string) {
+  constructor(container: HTMLElement, { pricePrecision, timeZone, barSeconds, settings, drawingCallbacks }: CandleChartOptions) {
     this.#timeZone = timeZone;
     this.#chart = createChart(container, {
       autoSize: true,
@@ -85,6 +102,50 @@ export class CandleChart {
       priceFormat: { type: 'price', precision: pricePrecision, minMove: 1 / 10 ** pricePrecision },
     });
     this.#markers = createSeriesMarkers(this.#series, []);
+    this.#drawingLayer = new DrawingLayer(this.#chart, this.#series, barSeconds, pricePrecision);
+    this.#series.attachPrimitive(this.#drawingLayer);
+    this.#drawings = new DrawingController(container, this.#drawingLayer, drawingCallbacks);
+    this.applySettings(settings ?? DEFAULT_CHART_SETTINGS);
+  }
+
+  /** Applies canvas and candle colours (TradingView-style chart settings). */
+  applySettings(s: ChartSettings): void {
+    this.#chart.applyOptions({
+      layout: { background: { type: ColorType.Solid, color: s.background }, textColor: s.scaleTextColor },
+      grid: {
+        vertLines: { visible: s.gridVisible, color: s.gridColor },
+        horzLines: { visible: s.gridVisible, color: s.gridColor },
+      },
+      crosshair: { vertLine: { color: s.crosshairColor }, horzLine: { color: s.crosshairColor } },
+    });
+    this.#series.applyOptions({
+      upColor: s.upColor,
+      downColor: s.downColor,
+      borderVisible: s.borderVisible,
+      borderUpColor: s.borderUpColor,
+      borderDownColor: s.borderDownColor,
+      wickVisible: s.wickVisible,
+      wickUpColor: s.wickUpColor,
+      wickDownColor: s.wickDownColor,
+    });
+    this.#drawingLayer.setHandleFill(s.background);
+  }
+
+  // ---- drawings ----
+  setDrawingTool(tool: DrawingTool): void {
+    this.#drawings.setTool(tool);
+  }
+  setDrawings(drawings: readonly Drawing[]): void {
+    this.#drawings.setDrawings(drawings);
+  }
+  setDrawingStyle(style: { color?: string; width?: number }): void {
+    this.#drawings.setStyle(style);
+  }
+  deleteSelectedDrawing(): void {
+    this.#drawings.deleteSelected();
+  }
+  clearDrawings(): void {
+    this.#drawings.clearAll();
   }
 
   /**
@@ -103,6 +164,7 @@ export class CandleChart {
     }
     this.#count = candles.length;
     this.#lastTime = last?.time ?? null;
+    this.#drawingLayer.setBars(candles);
   }
 
   setPriceLines(lines: readonly ChartPriceLine[]): void {
@@ -133,6 +195,7 @@ export class CandleChart {
   }
 
   destroy(): void {
+    this.#drawings.destroy();
     this.#chart.remove();
   }
 
