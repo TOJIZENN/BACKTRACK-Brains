@@ -2,7 +2,7 @@
 
 > **Simulation only.** This application replays *historical* market data and simulates trades locally.
 > It never places orders, never connects to a live trading account, and the market-data provider
-> (**Twelve Data** by default, or OANDA) is used **only** as a source of historical candles. It is for education and personal backtesting.
+> (**Dukascopy** by default, or Twelve Data / OANDA) is used **only** as a source of historical candles. It is for education and personal backtesting.
 
 ## Project Overview
 
@@ -16,7 +16,7 @@ It is **not** an automated strategy tester: every trading decision is made by yo
 
 ## Features
 
-- XAU/USD on **M1, M5 (default), M15, H1**, loaded from **Twelve Data** (default) or OANDA, switchable with one env variable
+- XAU/USD on **M1, M5 (default), M15, H1**, loaded from **Dukascopy** (default, free, no key), Twelve Data or OANDA, switchable with one env variable
 - Replay setup screen: timeframe, date, start time, **time zone (default Kolkata, IST UTC+05:30)**,
   starting balance, risk %, same-candle rule,
   plus a "random date" button
@@ -100,14 +100,33 @@ a database (MongoDB/PostgreSQL) can be added later without touching the engines.
 
 ## Market Data Setup
 
-The server loads candles from one provider, chosen with `DATA_PROVIDER`. Both providers are normalized
+The server loads candles from one provider, chosen with `DATA_PROVIDER`. All providers are normalized
 into the same internal `Candle`, so the replay and trading engines don't know or care which one is used.
 
-### Twelve Data (default)
+### Dukascopy (default — free, no API key)
 
-1. Create a free account at [twelvedata.com](https://twelvedata.com) and copy your API key from
+Nothing to set up: leave `DATA_PROVIDER=dukascopy` (or unset). Dukascopy publishes free historical
+XAU/USD data back to 2003 at 1-minute resolution, with no account and no published rate limit.
+
+How the integration works (`server/src/services/dukascopy/`):
+
+- Minute candles come as one JSON bucket per UTC day, and hourly candles as one bucket per UTC month,
+  from `https://jetta.dukascopy.com/v1/candles/{minute|hour}/XAU-USD/{BID|ASK}/…`. This is the same
+  data API the open-source `dukascopy-node` library uses. It is unofficial and undocumented, so its
+  format could change.
+- Buckets are delta-encoded (base price + per-candle deltas × multiplier); the decoder rebuilds the
+  candles and skips closed-market gaps. Bid and ask are averaged into **mid** prices, matching the
+  other providers. Minutes with zero volume (no trades) are dropped.
+- M5 and M15 are aggregated from M1, so every timeframe is built from the same data. H1 uses the hourly buckets.
+- At most 4 requests run in parallel, and every completed day is cached locally, so each day is
+  downloaded once.
+- Dukascopy's terms of use apply to the data. It is fine for personal backtesting; don't redistribute it.
+
+### Twelve Data
+
+1. Set `DATA_PROVIDER=twelvedata`. Create a free account at [twelvedata.com](https://twelvedata.com) and copy your API key from
    *Account → API Keys*.
-2. Set `TWELVE_DATA_API_KEY` in `.env` and leave `DATA_PROVIDER=twelvedata`.
+2. Set `TWELVE_DATA_API_KEY` in `.env`.
 
 How the integration works (`server/src/services/twelvedata/`):
 
@@ -148,7 +167,8 @@ also accepted; if both exist, the root file wins. The server logs which file it 
 
 | Variable               | Required             | Description                                                     |
 | ---------------------- | -------------------- | --------------------------------------------------------------- |
-| `DATA_PROVIDER`        | no                   | `twelvedata` (default) or `oanda`                               |
+| `DATA_PROVIDER`        | no                   | `dukascopy` (default), `twelvedata` or `oanda`                  |
+| `DUKASCOPY_BASE_URL`   | no                   | Default `https://jetta.dukascopy.com/v1` (testing only)         |
 | `TWELVE_DATA_API_KEY`  | yes, for Twelve Data | Twelve Data API key                                             |
 | `TWELVE_DATA_BASE_URL` | no                   | Default `https://api.twelvedata.com`                            |
 | `OANDA_API_KEY`        | yes, for OANDA       | OANDA personal access token                                     |

@@ -13,7 +13,7 @@ describe('API', () => {
     const res = await request(appWith().app).get('/api/health');
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ status: 'ok', mode: 'simulation-only' });
-    expect(['twelvedata', 'oanda']).toContain(res.body.dataProvider);
+    expect(['dukascopy', 'twelvedata', 'oanda']).toContain(res.body.dataProvider);
     expect(typeof res.body.providerConfigured).toBe('boolean');
   });
 
