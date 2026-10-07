@@ -33,9 +33,10 @@ It is **not** an automated strategy tester: every trading decision is made by yo
 - Sortable trade history (by number, date, result, P&L) and an equity curve
 - Keyboard shortcuts, toasts for opened/closed trades, clear error messages
 - TradingView **Lightweight Charts** with zoom, pan, crosshair and auto-scaling, and no indicators by design
-- TradingView dark colour theme (`#131722` background, `#089981` / `#f23645` candles, `#2962ff` accent)
+- Black colour theme (`#000000` background, neutral grey panels) with TradingView candle colours
+  (`#089981` / `#f23645`) and `#2962ff` accent
 - **Chart settings** like TradingView: candle body / border / wick colours (up & down), background, grid,
-  crosshair and scale text, plus presets (TradingView dark/light, classic, monochrome). Saved in the browser
+  crosshair and scale text, plus presets (Black, TradingView dark/light, classic, monochrome). Saved in the browser
 - **Drawing tools**: trend line, ray, horizontal line, vertical line, rectangle, path and Fib retracement;
   select, drag, recolour, change width, delete
 - **TradingView-style buy/sell widget** on the chart's top-left: `[price SELL] [risk %] [price BUY]` with a
@@ -277,8 +278,9 @@ Open **Chart settings** (sliders icon in the header). Changes apply live and are
 
 - **Symbol:** candle body, border and wick colours for up and down candles. Borders and wicks can each be switched off.
 - **Canvas:** background, grid lines (on/off and colour), crosshair and scale text colours.
-- **Presets:** TradingView dark (default), TradingView light, Classic green/red and Monochrome.
-  **Reset to defaults** restores TradingView dark.
+- **Presets:** Black (default), TradingView dark (navy), TradingView light, Classic green/red and Monochrome.
+  **Reset to defaults** restores Black. Settings saved with the old navy default canvas switch to
+  black once; any colours you customized are kept.
 
 ## Drawing Tools
 

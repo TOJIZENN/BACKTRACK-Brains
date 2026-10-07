@@ -41,7 +41,7 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
   #drawings: readonly Drawing[] = [];
   #draft: Drawing | null = null;
   #selectedId: string | null = null;
-  #handleFill = '#131722';
+  #handleFill = '#000000';
   #requestUpdate: (() => void) | null = null;
   readonly #view: IPrimitivePaneView;
 

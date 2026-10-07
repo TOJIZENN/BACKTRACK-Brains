@@ -1,14 +1,14 @@
 @import "tailwindcss";
 
-/* TradingView dark theme palette */
+/* Black theme palette (neutral greys, no blue tint) */
 @theme {
-  --color-terminal-bg: #131722;
-  --color-terminal-panel: #1e222d;
-  --color-terminal-raised: #2a2e39;
-  --color-terminal-border: #2a2e39;
-  --color-terminal-strong: #434651;
-  --color-terminal-muted: #787b86;
-  --color-terminal-text: #d1d4dc;
+  --color-terminal-bg: #000000;
+  --color-terminal-panel: #0f0f0f;
+  --color-terminal-raised: #1c1c1c;
+  --color-terminal-border: #242424;
+  --color-terminal-strong: #3d3d3d;
+  --color-terminal-muted: #8c8c8c;
+  --color-terminal-text: #dbdbdb;
   --color-bull: #089981;
   --color-bear: #f23645;
   --color-accent: #2962ff;
