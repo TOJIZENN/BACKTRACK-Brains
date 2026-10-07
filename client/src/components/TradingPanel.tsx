@@ -3,6 +3,7 @@ import type { OrderTicket } from '../hooks/useOrderTicket';
 import type { InstrumentSpec } from '../types/market';
 import { formatMoney, formatPrice, formatQuantity } from '../utils/format';
 import { Button } from './ui/Button';
+import { Icon } from './ui/Icon';
 import { ErrorBanner } from './ui/ErrorBanner';
 import { Field, inputClass } from './ui/Field';
 import { OpenPositions } from './OpenPositions';
@@ -12,9 +13,12 @@ interface Props {
   ticket: OrderTicket;
   instrument: InstrumentSpec;
   onClosePosition: (tradeId: string) => void;
+  /** Panel width in px on large screens (full width on small screens). */
+  width: number;
+  onCollapse: () => void;
 }
 
-export function TradingPanel({ snapshot, ticket, instrument, onClosePosition }: Props) {
+export function TradingPanel({ snapshot, ticket, instrument, onClosePosition, width, onCollapse }: Props) {
   const { values, update, previews, impliedSide, error, submit } = ticket;
   const canTrade = snapshot.replay.atLiveEdge;
   const preview = previews[impliedSide ?? 'LONG'];
@@ -22,9 +26,24 @@ export function TradingPanel({ snapshot, ticket, instrument, onClosePosition }: 
   const price = (v: number) => formatPrice(v, instrument.pricePrecision);
 
   return (
-    <aside className="flex w-80 shrink-0 flex-col gap-4 overflow-y-auto border-l border-terminal-border bg-terminal-panel px-4 py-3 max-lg:w-full max-lg:border-l-0 max-lg:border-t">
+    <aside
+      className="flex w-(--panel-w) shrink-0 flex-col gap-4 overflow-y-auto border-l border-terminal-border bg-terminal-panel px-4 py-3 max-lg:w-full max-lg:border-l-0 max-lg:border-t"
+      style={{ '--panel-w': `${width}px` } as React.CSSProperties}
+      data-testid="trading-panel"
+    >
       <section>
-        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-terminal-muted">Order ticket</h2>
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-terminal-muted">Order ticket</h2>
+          <button
+            type="button"
+            onClick={onCollapse}
+            title="Hide panel (widen chart)"
+            aria-label="Hide order panel"
+            className="rounded p-0.5 text-terminal-muted hover:bg-terminal-raised hover:text-terminal-text max-lg:hidden"
+          >
+            <Icon name="chevronRight" />
+          </button>
+        </div>
         <div className="flex flex-col gap-3">
           <div className="grid grid-cols-2 gap-3">
             <Field label="Risk (%)" htmlFor="ticket-risk">

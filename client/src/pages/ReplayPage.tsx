@@ -5,6 +5,9 @@ import { ChartSettingsDialog } from '../components/ChartSettingsDialog';
 import { DrawingStyleBar } from '../components/DrawingStyleBar';
 import { DrawingToolbar } from '../components/DrawingToolbar';
 import { useChartSettings } from '../hooks/useChartSettings';
+import { usePanelLayout } from '../hooks/usePanelLayout';
+import { PanelResizer } from '../components/PanelResizer';
+import { CollapsedPanelRail } from '../components/CollapsedPanelRail';
 import { GRANULARITY_SECONDS } from '../types/market';
 import { BottomPanel } from '../components/BottomPanel';
 import { CandleChartView } from '../components/CandleChartView';
@@ -44,6 +47,7 @@ export function ReplayPage({ session, onExit, onJump, jumping, jumpError, onDism
   const ticket = useOrderTicket(session);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [chartSettings, setChartSettings] = useChartSettings();
+  const panel = usePanelLayout();
   const chartRef = useRef<CandleChart | null>(null);
   // Drawings live with this session (a new session or jump starts clean, so no lines drawn
   // with knowledge of a later period leak into an earlier replay). Reset keeps them.
@@ -185,7 +189,20 @@ export function ReplayPage({ session, onExit, onJump, jumping, jumpError, onDism
           )}
         </section>
         </div>
-        <TradingPanel snapshot={snapshot} ticket={ticket} instrument={instrument} onClosePosition={closePosition} />
+        {panel.layout.collapsed ? (
+          <>
+            <CollapsedPanelRail openPositions={hasOpenTrades ? snapshot.stats.openTrades : 0} onExpand={panel.toggleCollapsed} />
+            {/* Small screens always show the panel below the chart. */}
+            <div className="contents lg:hidden">
+              <TradingPanel snapshot={snapshot} ticket={ticket} instrument={instrument} onClosePosition={closePosition} width={panel.layout.width} onCollapse={panel.toggleCollapsed} />
+            </div>
+          </>
+        ) : (
+          <>
+            <PanelResizer width={panel.layout.width} onResize={panel.setWidth} />
+            <TradingPanel snapshot={snapshot} ticket={ticket} instrument={instrument} onClosePosition={closePosition} width={panel.layout.width} onCollapse={panel.toggleCollapsed} />
+          </>
+        )}
       </main>
 
       <ReplayControls
