@@ -1,13 +1,20 @@
+import type { ProviderId } from '../types/providers';
 import { getJson } from './api';
+
+export interface ProviderStatus {
+  id: ProviderId;
+  name: string;
+  /** False when the provider needs an API key that is not set in the server's .env */
+  configured: boolean;
+  /** Env variable holding the key (empty when none is needed) */
+  keyVariable: string;
+}
 
 export interface ServerHealth {
   status: 'ok';
-  dataProvider: string;
-  /** Human-readable provider name, e.g. "Twelve Data" */
-  dataProviderName: string;
-  providerConfigured: boolean;
-  /** Env variable holding the provider key, e.g. "TWELVE_DATA_API_KEY" */
-  providerKeyVariable: string;
+  /** Default provider (DATA_PROVIDER in .env) */
+  dataProvider: ProviderId;
+  providers: ProviderStatus[];
 }
 
 export function fetchHealth(signal?: AbortSignal): Promise<ServerHealth> {

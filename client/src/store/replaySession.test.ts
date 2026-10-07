@@ -7,6 +7,7 @@ import { prefetchThreshold } from '../replay/dataWindow';
 
 const setup: SessionSetup = {
   instrument: 'XAU_USD',
+  provider: 'dukascopy',
   granularity: 'M5',
   startMs: Date.parse('2026-01-15T01:00:00Z'),
   startingBalance: 10_000,

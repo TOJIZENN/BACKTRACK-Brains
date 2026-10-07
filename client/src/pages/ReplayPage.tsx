@@ -7,6 +7,7 @@ import { DrawingToolbar } from '../components/DrawingToolbar';
 import { useChartSettings } from '../hooks/useChartSettings';
 import { usePanelLayout } from '../hooks/usePanelLayout';
 import { GRANULARITY_SECONDS } from '../types/market';
+import { PROVIDER_INFO } from '../types/providers';
 import { TimeframeSwitcher } from '../components/TimeframeSwitcher';
 import { BottomPanel } from '../components/BottomPanel';
 import { CandleChartView } from '../components/CandleChartView';
@@ -125,6 +126,9 @@ export function ReplayPage(props: Props) {
         </span>
         <span className="text-xs text-terminal-muted" title="Applied when one candle touches both SL and TP">
           Same-candle rule: <span className="text-terminal-text">{SAME_CANDLE_RULE_LABELS[setup.sameCandleRule]}</span>
+        </span>
+        <span className="text-xs text-terminal-muted" title="Market-data source for this replay (choose it on the setup screen)">
+          Data: <span className="text-terminal-text" data-testid="data-source">{PROVIDER_INFO[setup.provider].name}</span>
         </span>
         <span className="text-xs text-terminal-muted" title="All times are shown in this time zone">
           Time zone: <span className="text-terminal-text">{TIME_ZONES.find((z) => z.id === setup.timeZone)?.label ?? setup.timeZone}</span>

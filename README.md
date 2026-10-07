@@ -100,8 +100,13 @@ a database (MongoDB/PostgreSQL) can be added later without touching the engines.
 
 ## Market Data Setup
 
-The server loads candles from one provider, chosen with `DATA_PROVIDER`. All providers are normalized
-into the same internal `Candle`, so the replay and trading engines don't know or care which one is used.
+Pick the **Data source** on the setup screen: Dukascopy, Twelve Data or OANDA. Each replay requests
+candles from the chosen source (`/api/candles?provider=…`), so switching needs no restart. The choice is
+remembered, and the replay header shows the active source. `DATA_PROVIDER` in `.env` only sets the default
+for first use. API keys stay in the server's `.env`. A source whose key is missing is shown as "needs
+… in .env" and can't be selected until you add it (the dev server restarts automatically). Each source
+has its own cache folder, so prices from different feeds never mix. All providers are normalized into the
+same internal `Candle`, so the replay and trading engines don't know or care which one is used.
 
 ### Dukascopy (default — free, no API key)
 
@@ -197,9 +202,9 @@ Endpoints:
 
 | Method | Path               | Description                                                           |
 | ------ | ------------------ | --------------------------------------------------------------------- |
-| GET    | `/api/health`      | Server status, active data provider and whether its key is configured |
+| GET    | `/api/health`      | Server status, default provider and every provider's configured state |
 | GET    | `/api/instruments` | Supported instruments and timeframes                                  |
-| GET    | `/api/candles`     | `?instrument=XAU_USD&granularity=M5&from=<ISO>&to=<ISO>` → `{ candles }` |
+| GET    | `/api/candles`     | `?instrument=XAU_USD&granularity=M5&from=<ISO>&to=<ISO>[&provider=dukascopy\|twelvedata\|oanda]` → `{ candles }` |
 
 Candles are returned in our own format (`{ timestamp, open, high, low, close, volume }`,
 completed candles only) with open time in `[from, to)`. Errors use `{ error: { code, message } }` with

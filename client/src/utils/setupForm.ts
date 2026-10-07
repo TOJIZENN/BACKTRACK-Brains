@@ -2,6 +2,7 @@ import type { Granularity } from '../types/market';
 import type { SessionSetup } from '../types/session';
 import type { SameCandleRule } from '../trading/types';
 import { DEFAULT_TIME_ZONE, isKnownTimeZone, toWallClock, zonedToUtcMs } from './timezone';
+import { DEFAULT_PROVIDER, isProviderId, type ProviderId } from '../types/providers';
 
 export const MIN_RISK_PERCENT = 0.01;
 export const MAX_RISK_PERCENT = 10;
@@ -12,6 +13,7 @@ const STORAGE_KEY = 'backtrack.setup.v2';
 /** Raw form values (strings straight from inputs). Date/time are wall-clock in `timeZone`. */
 export interface SetupFormValues {
   instrument: string;
+  provider: ProviderId;
   granularity: Granularity;
   date: string;
   time: string;
@@ -32,6 +34,7 @@ export function defaultSetupValues(nowMs: number = Date.now(), timeZone: string 
   while ([0, 6].includes(toWallClock(dayMs, timeZone).weekday)) dayMs -= DAY_MS;
   return {
     instrument: 'XAU_USD',
+    provider: DEFAULT_PROVIDER,
     granularity: 'M5',
     date: toWallClock(dayMs, timeZone).date,
     time: DEFAULT_START_TIME,
@@ -91,6 +94,7 @@ export function validateSetup(
     errors: null,
     setup: {
       instrument: values.instrument,
+      provider: values.provider,
       granularity: values.granularity,
       startMs,
       startingBalance: balance,
@@ -107,6 +111,7 @@ export function loadSavedSetup(): SetupFormValues | null {
     if (!raw) return null;
     const saved = { ...defaultSetupValues(), ...(JSON.parse(raw) as Partial<SetupFormValues>) };
     if (!isKnownTimeZone(saved.timeZone)) saved.timeZone = DEFAULT_TIME_ZONE;
+    if (!isProviderId(saved.provider)) saved.provider = DEFAULT_PROVIDER;
     return saved;
   } catch {
     return null;

@@ -17,7 +17,7 @@ export class SessionLoadError extends Error {
 /** Loads 1-minute history around the chosen start and creates a replay session positioned at it. */
 export async function loadReplaySession(
   setup: SessionSetup,
-  fetcher: CandleFetcher = fetchCandles,
+  fetcher: CandleFetcher = (instrument, granularity, fromMs, toMs) => fetchCandles(instrument, granularity, fromMs, toMs, setup.provider),
   now: () => number = Date.now,
   /** Carry an existing account (balance + history) into the new session, e.g. Jump to date. */
   account?: TradingAccount,

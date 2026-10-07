@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { fetchHealth } from '../services/health';
+import { fetchHealth, type ProviderStatus } from '../services/health';
+import { PROVIDER_IDS, PROVIDER_INFO, type ProviderId } from '../types/providers';
 import { Button } from '../components/ui/Button';
 import { ErrorBanner } from '../components/ui/ErrorBanner';
 import { Field, inputClass } from '../components/ui/Field';
@@ -26,29 +27,34 @@ interface Props {
 }
 
 export function SetupPage({ onStart, loading, error, onDismissError }: Props) {
-  const [values, setValues] = useState<SetupFormValues>(() => loadSavedSetup() ?? defaultSetupValues());
+  const [saved] = useState(loadSavedSetup);
+  const [values, setValues] = useState<SetupFormValues>(() => saved ?? defaultSetupValues());
   const [errors, setErrors] = useState<SetupFormErrors>({});
   const [serverWarning, setServerWarning] = useState<string | null>(null);
-  const [providerName, setProviderName] = useState<string | null>(null);
+  const [providers, setProviders] = useState<ProviderStatus[] | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
     fetchHealth(controller.signal)
       .then((health) => {
-        setProviderName(health.dataProviderName);
-        if (!health.providerConfigured) {
-          setServerWarning(
-            `${health.providerKeyVariable} is not configured on the server. Add your ${health.dataProviderName} key to .env and restart the server to load candles.`,
-          );
-        }
+        setProviders(health.providers);
+        // First visit: start from the server's default source (DATA_PROVIDER in .env).
+        if (!saved) setValues((prev) => ({ ...prev, provider: health.dataProvider }));
       })
       .catch((err: unknown) => {
         if (!controller.signal.aborted) setServerWarning(err instanceof Error ? err.message : String(err));
       });
     return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
   }, []);
 
   const zone = timeZoneShort(values.timeZone);
+  const providerStatus = (id: ProviderId) => providers?.find((p) => p.id === id);
+  const selectedProvider = providerStatus(values.provider);
+  const providerError =
+    selectedProvider && !selectedProvider.configured
+      ? `${PROVIDER_INFO[values.provider].name} needs an API key: add ${selectedProvider.keyVariable} to .env (the server restarts automatically), or pick Dukascopy.`
+      : null;
 
   const update = <K extends keyof SetupFormValues>(key: K, value: SetupFormValues[K]) =>
     setValues((prev) => ({ ...prev, [key]: value }));
@@ -60,6 +66,7 @@ export function SetupPage({ onStart, loading, error, onDismissError }: Props) {
       setErrors(result.errors);
       return;
     }
+    if (providerError) return;
     setErrors({});
     saveSetup(values);
     onStart(result.setup);
@@ -75,11 +82,6 @@ export function SetupPage({ onStart, loading, error, onDismissError }: Props) {
           <p className="mt-1 text-sm text-terminal-muted">
             Manual historical replay. Simulation only — no live orders are ever placed.
           </p>
-          {providerName && (
-            <p className="mt-1 text-xs text-terminal-muted">
-              Market data: <span className="text-terminal-text">{providerName}</span>
-            </p>
-          )}
         </div>
 
         {serverWarning && (
@@ -89,6 +91,33 @@ export function SetupPage({ onStart, loading, error, onDismissError }: Props) {
         )}
 
         <fieldset disabled={loading} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <Field
+              label="Data source"
+              htmlFor="provider"
+              error={providerError}
+              hint={`${PROVIDER_INFO[values.provider].note}. API keys stay on the server.`}
+            >
+              <select
+                id="provider"
+                className={inputClass}
+                value={values.provider}
+                onChange={(e) => update('provider', e.target.value as ProviderId)}
+              >
+                {PROVIDER_IDS.map((id) => {
+                  const status = providerStatus(id);
+                  const missingKey = status && !status.configured;
+                  return (
+                    <option key={id} value={id} disabled={missingKey}>
+                      {PROVIDER_INFO[id].name}
+                      {missingKey ? ` — needs ${status.keyVariable} in .env` : ''}
+                    </option>
+                  );
+                })}
+              </select>
+            </Field>
+          </div>
+
           <Field label="Instrument" htmlFor="instrument">
             <select id="instrument" className={inputClass} value={values.instrument} onChange={(e) => update('instrument', e.target.value)}>
               {Object.values(INSTRUMENTS).map((i) => (

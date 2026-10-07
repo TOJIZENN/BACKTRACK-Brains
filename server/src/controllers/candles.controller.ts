@@ -1,5 +1,7 @@
 import type { RequestHandler } from 'express';
+import { config, DATA_PROVIDER_NAMES, DATA_PROVIDERS, isProviderConfigured, providerKeyVariable, type DataProvider } from '../config/env.js';
 import { INSTRUMENTS, MAX_REQUEST_DAYS } from '../config/instruments.js';
+import { missingKeyError } from '../utils/upstreamErrors.js';
 import type { CandlesQuery, CandlesService } from '../services/candles.service.js';
 import { isGranularity } from '../types/candle.js';
 import { badRequest } from '../utils/httpError.js';
@@ -33,10 +35,22 @@ export function parseCandlesQuery(query: Record<string, unknown>, nowMs: number)
   return { instrument, granularity, fromMs, toMs };
 }
 
-export function createCandlesController(service: CandlesService): RequestHandler {
+/** Optional `provider` query parameter; defaults to DATA_PROVIDER from .env. */
+export function parseProvider(value: unknown): DataProvider {
+  if (value === undefined || value === '') return config.dataProvider;
+  if (typeof value !== 'string' || !(DATA_PROVIDERS as readonly string[]).includes(value)) {
+    throw badRequest(`Unsupported provider "${String(value)}". Supported: ${DATA_PROVIDERS.join(', ')}.`);
+  }
+  return value as DataProvider;
+}
+
+export function createCandlesController(getService: (provider: DataProvider) => CandlesService): RequestHandler {
   return async (req, res) => {
-    const query = parseCandlesQuery(req.query as Record<string, unknown>, Date.now());
-    const candles = await service.getCandles(query);
-    res.json({ instrument: query.instrument, granularity: query.granularity, candles });
+    const params = req.query as Record<string, unknown>;
+    const provider = parseProvider(params.provider);
+    const query = parseCandlesQuery(params, Date.now());
+    if (!isProviderConfigured(provider)) throw missingKeyError(DATA_PROVIDER_NAMES[provider], providerKeyVariable(provider));
+    const candles = await getService(provider).getCandles(query);
+    res.json({ instrument: query.instrument, granularity: query.granularity, provider, candles });
   };
 }

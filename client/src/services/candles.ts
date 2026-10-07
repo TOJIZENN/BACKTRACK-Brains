@@ -15,6 +15,8 @@ export async function fetchCandles(
   granularity: Granularity,
   fromMs: number,
   toMs: number,
+  /** Market-data source; omitted → the server's default (DATA_PROVIDER) */
+  provider?: string,
   signal?: AbortSignal,
 ): Promise<Candle[]> {
   const data = await getJson<CandlesResponse>(
@@ -24,6 +26,7 @@ export async function fetchCandles(
       granularity,
       from: new Date(fromMs).toISOString(),
       to: new Date(toMs).toISOString(),
+      ...(provider ? { provider } : {}),
     },
     signal,
   );
