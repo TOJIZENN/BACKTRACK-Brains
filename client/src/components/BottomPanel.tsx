@@ -19,6 +19,7 @@ interface Props {
   /** Called with the dragged content height; values near 0 collapse the panel. */
   onResize: (height: number) => void;
   onToggleCollapsed: () => void;
+  onClosePosition: (tradeId: string) => void;
 }
 
 /**
@@ -26,7 +27,7 @@ interface Props {
  * Its header strip is the resize handle — drag it up/down (all the way down collapses it), like
  * TradingView's bottom panel. Double-click the strip to collapse/restore.
  */
-export function BottomPanel({ snapshot, instrument, height, collapsed, onResize, onToggleCollapsed }: Props) {
+export function BottomPanel({ snapshot, instrument, height, collapsed, onResize, onToggleCollapsed, onClosePosition }: Props) {
   const { stats, trades } = snapshot;
   const visibleHeight = collapsed ? 0 : height;
   // Dragging up by d grows the content by d: new height = (height at grab + grab y) − pointer y.
@@ -70,8 +71,16 @@ export function BottomPanel({ snapshot, instrument, height, collapsed, onResize,
           </span>
         </span>
         <span className="text-terminal-muted">
+          Equity <span className="font-mono text-terminal-text">{formatMoney(stats.equity)}</span>
+        </span>
+        <span className="text-terminal-muted">
           Trades <span className="font-mono text-terminal-text">{stats.totalTrades}</span>
         </span>
+        {stats.openTrades > 0 && (
+          <span className="rounded bg-accent/20 px-1.5 text-accent" data-testid="open-count">
+            {stats.openTrades} open
+          </span>
+        )}
         {/* Grip: signals the strip can be dragged */}
         <span className="ml-auto flex flex-col gap-0.5 opacity-60 group-hover:opacity-100" aria-hidden="true">
           <span className="block h-px w-5 bg-terminal-muted" />
@@ -87,7 +96,13 @@ export function BottomPanel({ snapshot, instrument, height, collapsed, onResize,
             <AccountStats stats={stats} />
           </div>
           <div className="min-w-0 overflow-auto">
-            <TradeHistory trades={trades} instrument={instrument} />
+            <TradeHistory
+              trades={trades}
+              instrument={instrument}
+              markPrice={snapshot.currentCandle.close}
+              canClose={snapshot.replay.atLiveEdge}
+              onClose={onClosePosition}
+            />
           </div>
           <div className="flex min-h-0 flex-col">
             <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-terminal-muted">Equity curve</h3>

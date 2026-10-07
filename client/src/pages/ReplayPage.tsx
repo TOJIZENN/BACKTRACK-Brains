@@ -6,8 +6,6 @@ import { DrawingStyleBar } from '../components/DrawingStyleBar';
 import { DrawingToolbar } from '../components/DrawingToolbar';
 import { useChartSettings } from '../hooks/useChartSettings';
 import { usePanelLayout } from '../hooks/usePanelLayout';
-import { PanelResizer } from '../components/PanelResizer';
-import { CollapsedPanelRail } from '../components/CollapsedPanelRail';
 import { GRANULARITY_SECONDS } from '../types/market';
 import { BottomPanel } from '../components/BottomPanel';
 import { CandleChartView } from '../components/CandleChartView';
@@ -15,7 +13,7 @@ import { JumpToDate } from '../components/JumpToDate';
 import { ReplayControls } from '../components/ReplayControls';
 import { ShortcutsHelp } from '../components/ShortcutsHelp';
 import { TradeToasts } from '../components/TradeToasts';
-import { TradingPanel } from '../components/TradingPanel';
+import { OrderWidget } from '../components/OrderWidget';
 import { Button } from '../components/ui/Button';
 import { ErrorBanner } from '../components/ui/ErrorBanner';
 import { Icon } from '../components/ui/Icon';
@@ -154,8 +152,8 @@ export function ReplayPage({ session, onExit, onJump, jumping, jumpError, onDism
         </div>
       )}
 
-      <main className="flex min-h-0 flex-1 max-lg:flex-col">
-        <div className="flex min-w-0 flex-1 max-lg:h-[60vh] max-lg:flex-none">
+      <main className="flex min-h-0 flex-1">
+        <div className="flex min-w-0 flex-1">
         <DrawingToolbar tool={tool} onToolChange={setTool} onClearAll={() => chartRef.current?.clearDrawings()} hasDrawings={drawings.length > 0} />
         <section className="relative min-w-0 flex-1">
           <CandleChartView
@@ -181,6 +179,7 @@ export function ReplayPage({ session, onExit, onJump, jumping, jumpError, onDism
               onDelete={() => chartRef.current?.deleteSelectedDrawing()}
             />
           )}
+          <OrderWidget snapshot={snapshot} ticket={ticket} instrument={instrument} />
           <TradeToasts key={snapshot.runId} events={snapshot.events} pricePrecision={instrument.pricePrecision} />
           {jumping && (
             <div className="absolute inset-0 z-20 flex items-center justify-center bg-terminal-bg/70">
@@ -189,20 +188,6 @@ export function ReplayPage({ session, onExit, onJump, jumping, jumpError, onDism
           )}
         </section>
         </div>
-        {panel.layout.collapsed ? (
-          <>
-            <CollapsedPanelRail openPositions={hasOpenTrades ? snapshot.stats.openTrades : 0} onExpand={panel.toggleCollapsed} />
-            {/* Small screens always show the panel below the chart. */}
-            <div className="contents lg:hidden">
-              <TradingPanel snapshot={snapshot} ticket={ticket} instrument={instrument} onClosePosition={closePosition} width={panel.layout.width} onCollapse={panel.toggleCollapsed} />
-            </div>
-          </>
-        ) : (
-          <>
-            <PanelResizer width={panel.layout.width} onResize={panel.setWidth} />
-            <TradingPanel snapshot={snapshot} ticket={ticket} instrument={instrument} onClosePosition={closePosition} width={panel.layout.width} onCollapse={panel.toggleCollapsed} />
-          </>
-        )}
       </main>
 
       <ReplayControls
@@ -220,6 +205,7 @@ export function ReplayPage({ session, onExit, onJump, jumping, jumpError, onDism
         collapsed={panel.layout.bottomCollapsed}
         onResize={panel.setBottomHeight}
         onToggleCollapsed={panel.toggleBottomCollapsed}
+        onClosePosition={closePosition}
       />
 
       {dialog === 'help' && <ShortcutsHelp onClose={closeDialog} />}

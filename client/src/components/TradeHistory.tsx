@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { tradeResult } from '../trading/pnl';
+import { calculatePnl, calculateRMultiple, tradeResult } from '../trading/pnl';
 import type { ExitReason, Trade } from '../trading/types';
 import type { InstrumentSpec } from '../types/market';
 import { useTimeZone } from '../hooks/useTimeZone';
@@ -36,9 +36,14 @@ function compare(a: Trade, b: Trade, key: SortKey): number {
 interface Props {
   trades: readonly Trade[];
   instrument: InstrumentSpec;
+  /** Latest revealed close, used to mark open trades */
+  markPrice: number;
+  /** False while reviewing past candles (market closes only happen at the live edge) */
+  canClose: boolean;
+  onClose: (tradeId: string) => void;
 }
 
-export function TradeHistory({ trades, instrument }: Props) {
+export function TradeHistory({ trades, instrument, markPrice, canClose, onClose }: Props) {
   const timeZone = useTimeZone();
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: 'number', dir: 'desc' });
   const sorted = [...trades].sort((a, b) => compare(a, b, sort.key) * (sort.dir === 'asc' ? 1 : -1));
@@ -88,10 +93,15 @@ export function TradeHistory({ trades, instrument }: Props) {
       </thead>
       <tbody className="font-mono">
         {sorted.map((t) => {
-          const result = t.pnl === null ? null : tradeResult(t.pnl);
-          const resultClass = result === 'WIN' ? 'text-bull' : result === 'LOSS' ? 'text-bear' : 'text-terminal-muted';
+          const open = t.status === 'OPEN';
+          // Open trades show live, unrealized P&L marked at the latest revealed close.
+          const pnl = open ? calculatePnl(t.side, t.entryPrice, markPrice, t.quantity, instrument.quoteValuePerUnit) : t.pnl;
+          const r = open && pnl !== null ? calculateRMultiple(pnl, t.riskAmount) : t.rMultiple;
+          const result = open || t.pnl === null ? null : tradeResult(t.pnl);
+          const tone = pnl === null || pnl === 0 ? 'text-terminal-muted' : pnl > 0 ? 'text-bull' : 'text-bear';
+          const resultClass = open ? 'text-terminal-text' : result === 'WIN' ? 'text-bull' : result === 'LOSS' ? 'text-bear' : 'text-terminal-muted';
           return (
-            <tr key={t.id} className="border-t border-terminal-border/60 hover:bg-terminal-raised/60">
+            <tr key={t.id} className={`border-t border-terminal-border/60 hover:bg-terminal-raised/60 ${open ? 'bg-accent/5' : ''}`} data-testid={open ? 'open-position' : undefined}>
               <td className="px-1.5 py-1.5">{t.number}</td>
               <td className="px-1.5 py-1.5 whitespace-nowrap">{formatShortDateTime(t.entryTime, timeZone)}</td>
               <td className={`px-1.5 py-1.5 font-semibold ${t.side === 'LONG' ? 'text-bull' : 'text-bear'}`}>{t.side === 'LONG' ? 'BUY' : 'SELL'}</td>
@@ -99,9 +109,28 @@ export function TradeHistory({ trades, instrument }: Props) {
               <td className="px-1.5 py-1.5 text-right">{price(t.exitPrice)}</td>
               <td className="px-1.5 py-1.5 text-right text-terminal-muted">{price(t.stopLoss)}</td>
               <td className="px-1.5 py-1.5 text-right text-terminal-muted">{price(t.takeProfit)}</td>
-              <td className={`px-1.5 py-1.5 text-right ${resultClass}`}>{t.pnl === null ? '—' : formatSignedMoney(t.pnl)}</td>
-              <td className={`px-1.5 py-1.5 text-right ${resultClass}`}>{t.rMultiple === null ? '—' : formatR(t.rMultiple)}</td>
-              <td className={`px-1.5 py-1.5 font-sans font-semibold ${resultClass}`}>{result ?? 'OPEN'}</td>
+              <td className={`px-1.5 py-1.5 text-right ${tone} ${open ? 'italic' : ''}`} title={open ? 'Unrealized' : undefined}>
+                {pnl === null ? '—' : formatSignedMoney(pnl)}
+              </td>
+              <td className={`px-1.5 py-1.5 text-right ${tone} ${open ? 'italic' : ''}`}>{r === null ? '—' : formatR(r)}</td>
+              <td className={`px-1.5 py-1.5 font-sans font-semibold ${resultClass}`}>
+                {open ? (
+                  <span className="flex items-center gap-1.5">
+                    OPEN
+                    <button
+                      type="button"
+                      onClick={() => onClose(t.id)}
+                      disabled={!canClose}
+                      title={canClose ? 'Close at market' : 'Step forward to the latest candle to close'}
+                      className="rounded border border-terminal-strong px-1.5 py-px text-[11px] font-normal text-terminal-text hover:border-bear hover:text-bear disabled:opacity-40"
+                    >
+                      Close
+                    </button>
+                  </span>
+                ) : (
+                  result
+                )}
+              </td>
               <td className="px-1.5 py-1.5 font-sans text-terminal-muted">
                 <span className="whitespace-nowrap">{t.exitReason ? EXIT_REASON_LABELS[t.exitReason] : '—'}</span>
                 {t.ambiguousExit && (

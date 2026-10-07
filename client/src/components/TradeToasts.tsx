@@ -32,7 +32,7 @@ export function TradeToasts({ events, pricePrecision }: { events: readonly Trade
   }, [events]);
 
   return (
-    <div className="pointer-events-none absolute left-3 top-3 z-10 flex flex-col gap-2" aria-live="polite">
+    <div className="pointer-events-none absolute bottom-9 left-3 z-10 flex flex-col-reverse gap-2" aria-live="polite">
       {visible.map(({ id, kind, trade }) => {
         const label = `#${trade.number} ${trade.side === 'LONG' ? 'BUY' : 'SELL'}`;
         if (kind === 'opened') {

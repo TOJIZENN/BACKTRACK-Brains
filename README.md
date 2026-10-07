@@ -25,7 +25,7 @@ It is **not** an automated strategy tester: every trading decision is made by yo
 - Forward data is prefetched in the background, so a replay can run across days and weekends
 - Market BUY / SELL with SL and TP, live position-size, risk, potential-profit and R:R preview
 - Automatic SL/TP detection on every new candle, with a configurable **same-candle rule**
-- Manual "Close at market", entry/SL/TP lines and entry/exit markers on the chart
+- "Close at market" from the positions list, entry/SL/TP lines and entry/exit markers on the chart
 - Dashboard: starting/current balance, equity, total P&L, win rate, number of trades, winners, losers,
   average R, profit factor, maximum drawdown
 - Sortable trade history (by number, date, result, P&L) and an equity curve
@@ -36,9 +36,11 @@ It is **not** an automated strategy tester: every trading decision is made by yo
   crosshair and scale text, plus presets (TradingView dark/light, classic, monochrome). Saved in the browser
 - **Drawing tools**: trend line, ray, horizontal line, vertical line, rectangle, path and Fib retracement;
   select, drag, recolour, change width, delete
-- **Flexible layout** (desktop): drag the divider between the chart and the order panel to resize it, or
-  collapse the panel (› button) for full width. Drag the *Trades & performance* strip up/down to resize the
-  bottom panel; drag it all the way down (or double-click it) to collapse it for full height. The layout is remembered
+- **TradingView-style buy/sell widget** on the chart's top-left: `[price SELL] [risk %] [price BUY]` with a
+  compact SL/TP row underneath (R:R, $ risk, size, potential profit). The chart uses the full width; there is no side panel
+- **Positions in the bottom panel**: open trades show live (unrealized) P&L and R with a **Close** button
+- **Flexible layout** (desktop): drag the *Trades & performance* strip up/down to resize the bottom panel; drag
+  it all the way down (or double-click it) to collapse it for full height. The layout is remembered
 
 ## Architecture
 
@@ -350,7 +352,7 @@ R multiple    = P&L ÷ risk amount                                (+$200 → +2R
 | →         | Next candle                          |
 | ←         | Previous candle                      |
 | R         | Reset replay (asks to confirm if there are trades) |
-| B / S     | Buy / Sell using the order ticket's SL & TP |
+| B / S     | Buy / Sell using the widget's SL & TP |
 | Esc       | Close dialog / leave the focused input / cancel a drawing |
 | Del / Backspace | Delete the selected drawing |
 | Enter     | Finish a path drawing |

@@ -1,15 +1,10 @@
-/** Sizes of the right-hand order panel and the bottom dashboard, remembered per browser. */
+/** Size of the bottom dashboard, remembered per browser. */
 export interface PanelLayout {
-  /** Order panel width (px) */
-  width: number;
-  collapsed: boolean;
   /** Bottom dashboard content height (px), excluding its header strip */
   bottomHeight: number;
   bottomCollapsed: boolean;
 }
 
-export const PANEL_MIN_WIDTH = 260;
-export const PANEL_MAX_WIDTH = 560;
 export const BOTTOM_MIN_HEIGHT = 140;
 export const BOTTOM_MAX_HEIGHT = 640;
 /** Dragging the bottom panel below this height collapses it to its header strip. */
@@ -17,13 +12,8 @@ export const BOTTOM_COLLAPSE_THRESHOLD = 70;
 /** Viewport height kept for the header, chart and replay controls when the bottom panel is dragged up. */
 export const CHART_MIN_RESERVED_HEIGHT = 460;
 
-export const DEFAULT_PANEL_LAYOUT: PanelLayout = { width: 320, collapsed: false, bottomHeight: 260, bottomCollapsed: false };
+export const DEFAULT_PANEL_LAYOUT: PanelLayout = { bottomHeight: 260, bottomCollapsed: false };
 const STORAGE_KEY = 'backtrack.panelLayout.v1';
-
-export function clampPanelWidth(width: number): number {
-  if (!Number.isFinite(width)) return DEFAULT_PANEL_LAYOUT.width;
-  return Math.round(Math.min(PANEL_MAX_WIDTH, Math.max(PANEL_MIN_WIDTH, width)));
-}
 
 export function clampBottomHeight(height: number, maxHeight: number = BOTTOM_MAX_HEIGHT): number {
   if (!Number.isFinite(height)) return DEFAULT_PANEL_LAYOUT.bottomHeight;
@@ -44,8 +34,6 @@ export function sanitizePanelLayout(input: unknown): PanelLayout {
   const raw = (typeof input === 'object' && input !== null ? input : {}) as Partial<Record<keyof PanelLayout, unknown>>;
   const bool = (v: unknown, fallback: boolean) => (typeof v === 'boolean' ? v : fallback);
   return {
-    width: typeof raw.width === 'number' ? clampPanelWidth(raw.width) : DEFAULT_PANEL_LAYOUT.width,
-    collapsed: bool(raw.collapsed, DEFAULT_PANEL_LAYOUT.collapsed),
     bottomHeight: typeof raw.bottomHeight === 'number' ? clampBottomHeight(raw.bottomHeight) : DEFAULT_PANEL_LAYOUT.bottomHeight,
     bottomCollapsed: bool(raw.bottomCollapsed, DEFAULT_PANEL_LAYOUT.bottomCollapsed),
   };
