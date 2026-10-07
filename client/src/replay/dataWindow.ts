@@ -14,14 +14,22 @@ export const BASE_SECONDS = 60;
 export const HISTORY_MS = 8 * DAY_MS;
 /** 1-minute data fetched per forward request (within the server's per-request span limit). */
 export const AHEAD_MS = 5 * DAY_MS;
+/**
+ * Native daily candles loaded *before* the 1-minute history, so the 1D chart has ~6 months of context.
+ * They end where the 1-minute data starts (itself before the replay start), so nothing is revealed early.
+ */
+export const DAILY_HISTORY_MS = 180 * DAY_MS;
 
 /** Keep at least this many bars of the chart timeframe buffered ahead (in 1-minute candles). */
 const PREFETCH_AHEAD_BARS = 40;
 const MIN_PREFETCH_THRESHOLD = 300;
+/** Never try to keep more than ~5 days of minutes buffered (the 1D view would otherwise ask for months). */
+const MAX_PREFETCH_THRESHOLD = 7200;
 
 /** Prefetch more 1-minute data once fewer than this many unrevealed candles remain loaded. */
 export function prefetchThreshold(timeframeSeconds: number): number {
-  return Math.max(MIN_PREFETCH_THRESHOLD, PREFETCH_AHEAD_BARS * (timeframeSeconds / BASE_SECONDS));
+  const wanted = PREFETCH_AHEAD_BARS * (timeframeSeconds / BASE_SECONDS);
+  return Math.min(MAX_PREFETCH_THRESHOLD, Math.max(MIN_PREFETCH_THRESHOLD, wanted));
 }
 
 /**

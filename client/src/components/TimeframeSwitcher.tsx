@@ -1,6 +1,6 @@
 import { GRANULARITIES, type Granularity } from '../types/market';
 
-const LABELS: Record<Granularity, string> = { M1: '1m', M5: '5m', M15: '15m', H1: '1h' };
+const LABELS: Record<Granularity, string> = { M1: '1m', M5: '5m', M15: '15m', H1: '1h', D1: '1D' };
 
 interface Props {
   value: Granularity;

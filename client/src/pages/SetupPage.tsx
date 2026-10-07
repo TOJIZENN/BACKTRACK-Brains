@@ -129,7 +129,7 @@ export function SetupPage({ onStart, loading, error, onDismissError }: Props) {
           </Field>
 
           <Field label="Timeframe">
-            <div className="grid grid-cols-4 gap-1 rounded-md border border-terminal-border bg-terminal-bg p-1" role="radiogroup" aria-label="Timeframe">
+            <div className="grid grid-cols-5 gap-1 rounded-md border border-terminal-border bg-terminal-bg p-1" role="radiogroup" aria-label="Timeframe">
               {GRANULARITIES.map((g) => (
                 <button
                   key={g}

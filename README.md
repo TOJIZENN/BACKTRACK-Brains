@@ -16,13 +16,13 @@ It is **not** an automated strategy tester: every trading decision is made by yo
 
 ## Features
 
-- XAU/USD on **M1, M5 (default), M15, H1**, loaded from **Dukascopy** (default, free, no key), Twelve Data or OANDA, switchable with one env variable
+- XAU/USD on **M1, M5 (default), M15, H1, D1**, loaded from **Dukascopy** (default, free, no key), Twelve Data or OANDA, switchable with one env variable
 - Replay setup screen: timeframe, date, start time, **time zone (default Kolkata, IST UTC+05:30)**,
   starting balance, risk %, same-candle rule,
   plus a "random date" button
 - Strict **no-lookahead** replay: only closed candles up to the replay point are ever rendered
 - Controls: Play / Pause, Next, Previous, Reset, speed 0.5x / 1x / 2x / 5x / 10x, Jump to date
-- **TradingView-style timeframe switching** mid-replay (1m · 5m · 15m · 1h in the top bar): instant,
+- **TradingView-style timeframe switching** mid-replay (1m · 5m · 15m · 1h · 1D in the top bar): instant,
   with a live forming bar; replays run on 1-minute data, so SL/TP are resolved minute by minute
 - Forward data is prefetched in the background, so a replay can run across days and weekends
 - Market BUY / SELL with SL and TP, live position-size, risk, potential-profit and R:R preview
@@ -115,14 +115,15 @@ XAU/USD data back to 2003 at 1-minute resolution, with no account and no publish
 
 How the integration works (`server/src/services/dukascopy/`):
 
-- Minute candles come as one JSON bucket per UTC day, and hourly candles as one bucket per UTC month,
-  from `https://jetta.dukascopy.com/v1/candles/{minute|hour}/XAU-USD/{BID|ASK}/…`. This is the same
+- Minute candles come as one JSON bucket per UTC day, hourly candles as one bucket per UTC month and
+  daily candles as one bucket per UTC year, from
+  `https://jetta.dukascopy.com/v1/candles/{minute|hour|day}/XAU-USD/{BID|ASK}/…`. This is the same
   data API the open-source `dukascopy-node` library uses. It is unofficial and undocumented, so its
   format could change.
 - Buckets are delta-encoded (base price + per-candle deltas × multiplier); the decoder rebuilds the
   candles and skips closed-market gaps. Bid and ask are averaged into **mid** prices, matching the
   other providers. Minutes with zero volume (no trades) are dropped.
-- M5 and M15 are aggregated from M1, so every timeframe is built from the same data. H1 uses the hourly buckets.
+- M5 and M15 are aggregated from M1, so every timeframe is built from the same data. H1 and D1 use the hourly and daily buckets.
 - At most 4 requests run in parallel, and every completed day is cached locally, so each day is
   downloaded once.
 - Dukascopy's terms of use apply to the data. It is fine for personal backtesting; don't redistribute it.
@@ -136,7 +137,7 @@ How the integration works (`server/src/services/dukascopy/`):
 How the integration works (`server/src/services/twelvedata/`):
 
 - Calls `GET https://api.twelvedata.com/time_series` with `symbol=XAU/USD`,
-  `interval=1min|5min|15min|1h`, `start_date`/`end_date`, `timezone=UTC`, `order=ASC` and
+  `interval=1min|5min|15min|1h|1day`, `start_date`/`end_date`, `timezone=UTC`, `order=ASC` and
   `outputsize=5000`. The key is sent as the `apikey` parameter, from the server only.
 - Twelve Data reports errors either as an HTTP status or as HTTP 200 with `{"status":"error","code":…}`.
   Both are mapped to the app's error codes (401 → `INVALID_CREDENTIALS`, 429 → `RATE_LIMITED`, 5xx →
@@ -158,7 +159,7 @@ Set `DATA_PROVIDER=oanda`, then:
 3. Set `OANDA_API_KEY`, and set `OANDA_BASE_URL` to match the token: practice
    `https://api-fxpractice.oanda.com`, live `https://api-fxtrade.oanda.com`.
 
-OANDA candles are mid prices (`price=M`). Twelve Data's XAU/USD feed is a different source, so prices
+OANDA candles are mid prices (`price=M`); daily candles are aligned to 00:00 UTC. Twelve Data's XAU/USD feed is a different source, so prices
 can differ slightly between providers.
 
 For either provider, the key is read only by the server. The browser talks to our own `/api` endpoints and
@@ -251,7 +252,7 @@ as a 10:00 UTC start. Zones with daylight saving are handled per timestamp. IST 
 
 ## Timeframe Switching
 
-Use the **1m · 5m · 15m · 1h** buttons in the top bar to change timeframe at any moment, like TradingView.
+Use the **1m · 5m · 15m · 1h · 1D** buttons in the top bar to change timeframe at any moment, like TradingView.
 
 Every replay runs on **1-minute candles**. The chart timeframe is just a view that aggregates them, so:
 
@@ -265,6 +266,9 @@ Every replay runs on **1-minute candles**. The chart timeframe is just a view th
   levels fall inside the same minute.
 - Balance, trade history, open positions, drawings and replay speed are untouched by a switch. Trade
   markers snap to the bar that contains them. **Reset** returns to the start of the run.
+- **1D** bars are UTC days (00:00 UTC, i.e. 05:30 IST). Gold's Sunday-evening session is folded into
+  Monday's bar, as most brokers do. To give the daily chart context, about 6 months of daily candles
+  are loaded at the start. All of them end before the first minute of the replay window. Next on 1D reveals one full trading day.
 - "Replayed 2h 15m" in the controls shows the time replayed since the start, the same on every timeframe.
 
 ## Chart Settings

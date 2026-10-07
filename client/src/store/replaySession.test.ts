@@ -293,3 +293,40 @@ describe('ReplaySession on 1-minute data with a chart timeframe', () => {
     expect(s.getSnapshot().elapsedMs).toBe((59 - 36) * 60_000);
   });
 });
+
+describe('1D chart timeframe', () => {
+  // Minutes from Monday 2026-01-12 00:00 UTC, two full days + part of Wednesday.
+  const MON = Date.parse('2026-01-12T00:00:00Z') / 1000;
+  const mins = (n: number) =>
+    Array.from({ length: n }, (_, i) => {
+      const time = MON + i * 60;
+      return { time, timestamp: new Date(time * 1000).toISOString().replace('.000Z', 'Z'), open: 100 + i / 1000, high: 101 + i / 1000, low: 99 + i / 1000, close: 100 + i / 1000, volume: 1 };
+    });
+  const history = [
+    { time: MON - 3 * 86_400, timestamp: '2026-01-09T00:00:00Z', open: 90, high: 95, low: 85, close: 92, volume: 1 },
+    { time: MON - 86_400, timestamp: '2026-01-11T00:00:00Z', open: 92, high: 93, low: 91, close: 92.5, volume: 1 }, // Sunday → Monday
+  ];
+  const session = (start: number) =>
+    new ReplaySession({ ...setup, granularity: 'D1' }, mins(3000), start, 0, vi.fn<CandleFetcher>(async () => []), FAR_FUTURE, undefined, history);
+  const day = (sec: number) => new Date(sec * 1000).toISOString().slice(0, 10);
+
+  it('shows months of daily history plus the forming day from revealed minutes', () => {
+    const s = session(600); // Monday 10:00
+    const bars = s.getSnapshot().visibleCandles;
+    expect(bars.map((b) => day(b.time))).toEqual(['2026-01-09', '2026-01-12']);
+    // Monday = Sunday history bar (open 92) + revealed Monday minutes only
+    expect(bars[1]).toMatchObject({ open: 92, close: 100.6 });
+    expect(bars[1].high).toBe(101.6); // nothing after the clock
+  });
+
+  it('Next completes the day, then reveals one full day; Previous steps back one day', () => {
+    const s = session(600);
+    s.next();
+    expect(new Date(s.getSnapshot().clockMs).toISOString()).toBe('2026-01-13T00:00:00.000Z');
+    s.next();
+    expect(s.getSnapshot().visibleCandles.map((b) => day(b.time))).toEqual(['2026-01-09', '2026-01-12', '2026-01-13']);
+    s.previous();
+    expect(s.getSnapshot().visibleCandles.at(-1)!.time).toBe(MON);
+  });
+});
+

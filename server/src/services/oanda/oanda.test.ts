@@ -110,6 +110,14 @@ describe('OANDA client + candle source against a fake OANDA server', () => {
     expect(lastRequest.url).toContain('granularity=M5');
   });
 
+  it('requests daily candles aligned to UTC midnight for D1', async () => {
+    const http = axios.create({ baseURL, headers: { Authorization: 'Bearer good-key' } });
+    await createOandaCandleSource(createOandaClient(http)).fetchCandles('XAU_USD', 'D1', Date.parse('2026-01-01T00:00:00Z'), Date.parse('2026-02-01T00:00:00Z'));
+    expect(lastRequest.url).toContain('granularity=D&');
+    expect(lastRequest.url).toContain('dailyAlignment=0');
+    expect(lastRequest.url).toContain('alignmentTimezone=UTC');
+  });
+
   it('surfaces invalid credentials as a typed error', async () => {
     const http = axios.create({ baseURL, headers: { Authorization: 'Bearer bad-key' } });
     const source = createOandaCandleSource(createOandaClient(http));

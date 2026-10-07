@@ -8,25 +8,27 @@ const PROVIDER = 'Dukascopy';
 
 /** Read-only client for Dukascopy's free historical data API (no key required). */
 export interface DukascopyClient {
-  /** One bucket starting at `bucketStartMs` (UTC day for minute, UTC month for hour); null when no data. */
+  /** One bucket starting at `bucketStartMs` (UTC day / month / year for minute / hour / day); null when no data. */
   getCandleBucket(code: string, source: DukascopySource, price: DukascopyPriceType, bucketStartMs: number): Promise<DukascopyCandleBucket | null>;
 }
 
-function bucketEnd(source: DukascopySource, startMs: number): number {
+export function bucketEnd(source: DukascopySource, startMs: number): number {
   const d = new Date(startMs);
-  return source === 'minute'
-    ? Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1)
-    : Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1);
+  if (source === 'minute') return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1);
+  if (source === 'hour') return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1);
+  return Date.UTC(d.getUTCFullYear() + 1, 0);
 }
 
 /**
- * Completed buckets have stable paths (…/YYYY/M/D for minutes, …/YYYY/M for hours, month 1-based);
+ * Completed buckets have stable paths (…/YYYY/M/D for minutes, …/YYYY/M for hours, …/YYYY for days;
+ * month 1-based);
  * the still-open bucket is requested with `?from=<bucket start>`.
  */
 export function bucketPath(code: string, source: DukascopySource, price: DukascopyPriceType, bucketStartMs: number, nowMs: number): string {
   const base = `/candles/${source}/${code}/${price}`;
   if (nowMs >= bucketStartMs && nowMs < bucketEnd(source, bucketStartMs)) return `${base}?from=${bucketStartMs}`;
   const d = new Date(bucketStartMs);
+  if (source === 'day') return `${base}/${d.getUTCFullYear()}`;
   const ym = `${d.getUTCFullYear()}/${d.getUTCMonth() + 1}`;
   return source === 'minute' ? `${base}/${ym}/${d.getUTCDate()}` : `${base}/${ym}`;
 }

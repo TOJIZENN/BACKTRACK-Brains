@@ -21,7 +21,7 @@ describe('API', () => {
   it('GET /api/instruments lists XAU_USD with its timeframes', async () => {
     const res = await request(appWith().app).get('/api/instruments');
     expect(res.body.instruments[0].symbol).toBe('XAU_USD');
-    expect(res.body.instruments[0].granularities.map((g: { id: string }) => g.id)).toEqual(['M1', 'M5', 'M15', 'H1']);
+    expect(res.body.instruments[0].granularities.map((g: { id: string }) => g.id)).toEqual(['M1', 'M5', 'M15', 'H1', 'D1']);
   });
 
   it('GET /api/candles passes a validated query to the service', async () => {

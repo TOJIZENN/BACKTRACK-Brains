@@ -60,7 +60,8 @@ export function createOandaClient(http?: AxiosInstance): OandaClient {
           {
             params: {
               price: 'M',
-              granularity,
+              // Our D1 is a UTC day; OANDA's default daily bar starts at 17:00 New York.
+              ...(granularity === 'D1' ? { granularity: 'D', dailyAlignment: 0, alignmentTimezone: 'UTC' } : { granularity }),
               from: new Date(fromMs).toISOString(),
               to: new Date(toMs).toISOString(),
             },

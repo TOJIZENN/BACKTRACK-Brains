@@ -61,9 +61,12 @@ describe('Dukascopy decoding', () => {
     const today = Date.parse('2026-10-07T00:00:00Z');
     expect(bucketPath('XAU-USD', 'minute', 'BID', today, now)).toBe(`/candles/minute/XAU-USD/BID?from=${today}`);
     expect(toDukascopyCode('XAU_USD')).toBe('XAU-USD');
+    expect(bucketPath('XAU-USD', 'day', 'BID', Date.parse('2025-01-01T00:00:00Z'), now)).toBe('/candles/day/XAU-USD/BID/2025');
+    expect(bucketPath('XAU-USD', 'day', 'BID', Date.parse('2026-01-01T00:00:00Z'), now)).toBe(`/candles/day/XAU-USD/BID?from=${Date.parse('2026-01-01T00:00:00Z')}`);
   });
 
-  it('enumerates UTC day and month buckets', () => {
+  it('enumerates UTC day, month and year buckets', () => {
+    expect(bucketStarts('day', Date.parse('2025-07-01T00:00:00Z'), Date.parse('2026-03-01T00:00:00Z')).map((t) => new Date(t).getUTCFullYear())).toEqual([2025, 2026]);
     expect(bucketStarts('minute', DAY + 5 * MIN, DAY + 2 * 86_400_000)).toEqual([DAY, DAY + 86_400_000]);
     expect(bucketStarts('hour', Date.parse('2026-08-20T00:00:00Z'), Date.parse('2026-10-02T00:00:00Z')).map((t) => new Date(t).toISOString().slice(0, 7))).toEqual(['2026-08', '2026-09', '2026-10']);
   });

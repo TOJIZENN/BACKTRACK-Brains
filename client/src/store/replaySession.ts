@@ -6,7 +6,7 @@ import {
   PREFETCH_RETRY_BACKOFF_MS,
   prefetchThreshold,
 } from '../replay/dataWindow';
-import { aggregateCandles } from '../utils/aggregate';
+import { aggregateCandles, bucketStart, mergeBars } from '../utils/aggregate';
 import { ReplayEngine, type ReplaySpeed, type ReplayState } from '../replay/replayEngine';
 import { ReplayPlayer } from '../replay/replayPlayer';
 import { computeStats, type AccountStats } from '../trading/statistics';
@@ -90,6 +90,7 @@ export class ReplaySession {
   #events: TradeEvent[] = [];
   #nextEventId = 1;
   #timeframe: Granularity;
+  readonly #dailyHistory: readonly Candle[];
   readonly #startClockMs: number;
   #aggregated: { source: readonly Candle[]; timeframe: Granularity; bars: readonly Candle[] } | null = null;
   #snapshot: ReplaySnapshot;
@@ -102,7 +103,10 @@ export class ReplaySession {
     fetchCandles: CandleFetcher,
     now: () => number = Date.now,
     account?: TradingAccount,
+    /** Native daily candles from before the 1-minute data (context for the 1D chart only). */
+    dailyHistory: readonly Candle[] = [],
   ) {
+    this.#dailyHistory = aggregateCandles(dailyHistory, GRANULARITY_SECONDS.D1);
     this.setup = setup;
     this.#account = account ?? this.#newAccount();
     this.#engine = new ReplayEngine(candles, startIndex);
@@ -142,9 +146,9 @@ export class ReplaySession {
   previous(): void {
     this.pause();
     const seconds = this.#timeframeSeconds();
-    const barStart = Math.floor(this.#engine.getCurrentCandle().time / seconds) * seconds;
+    const bar = bucketStart(this.#engine.getCurrentCandle().time, seconds);
     let moved = false;
-    while (this.#engine.getCurrentCandle().time >= barStart && this.#engine.previous()) moved = true;
+    while (bucketStart(this.#engine.getCurrentCandle().time, seconds) === bar && this.#engine.previous()) moved = true;
     if (moved) this.#emit();
   }
 
@@ -295,7 +299,7 @@ export class ReplaySession {
   #stepBar(): boolean {
     if (!this.#step()) return false;
     const seconds = this.#timeframeSeconds();
-    const barEnd = Math.floor(this.#engine.getCurrentCandle().time / seconds) * seconds + seconds;
+    const barEnd = bucketStart(this.#engine.getCurrentCandle().time, seconds) + seconds;
     while (this.#engine.nextCandleOpensBefore(barEnd)) this.#step();
     return true;
   }
@@ -363,8 +367,13 @@ export class ReplaySession {
     const source = this.#engine.getVisibleCandles();
     const cached = this.#aggregated;
     if (cached && cached.source === source && cached.timeframe === this.#timeframe) return cached.bars;
-    const bars =
-      this.#timeframe === BASE_GRANULARITY ? source : Object.freeze(aggregateCandles(source, this.#timeframeSeconds()));
+    let bars: readonly Candle[];
+    if (this.#timeframe === BASE_GRANULARITY) bars = source;
+    else {
+      const aggregated = aggregateCandles(source, this.#timeframeSeconds());
+      // Daily view: months of native daily context, then days built from the revealed minutes.
+      bars = Object.freeze(this.#timeframe === 'D1' ? mergeBars(this.#dailyHistory, aggregated) : aggregated);
+    }
     this.#aggregated = { source, timeframe: this.#timeframe, bars };
     return bars;
   }

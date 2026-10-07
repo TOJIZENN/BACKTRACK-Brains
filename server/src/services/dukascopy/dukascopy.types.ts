@@ -24,5 +24,5 @@ export interface DukascopyCandleBucket {
 }
 
 export type DukascopyPriceType = 'BID' | 'ASK';
-/** "minute" buckets are UTC days; "hour" buckets are UTC months */
-export type DukascopySource = 'minute' | 'hour';
+/** "minute" buckets are UTC days, "hour" buckets UTC months, "day" buckets UTC years */
+export type DukascopySource = 'minute' | 'hour' | 'day';

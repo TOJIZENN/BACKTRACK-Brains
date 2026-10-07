@@ -14,7 +14,7 @@ export const INSTRUMENTS: Record<string, InstrumentConfig> = {
     symbol: 'XAU_USD',
     displayName: 'XAU/USD',
     pricePrecision: 3,
-    granularities: ['M1', 'M5', 'M15', 'H1'],
+    granularities: ['M1', 'M5', 'M15', 'H1', 'D1'],
   },
 };
 
@@ -23,6 +23,7 @@ export const GRANULARITY_SECONDS: Record<Granularity, number> = {
   M5: 300,
   M15: 900,
   H1: 3600,
+  D1: 86_400,
 };
 
 /** Upper bound on the span of a single /api/candles request, to keep responses reasonable. */
@@ -31,6 +32,7 @@ export const MAX_REQUEST_DAYS: Record<Granularity, number> = {
   M5: 31,
   M15: 92,
   H1: 366,
+  D1: 400,
 };
 
 /** Both OANDA and Twelve Data cap a single candle request at this many candles. */

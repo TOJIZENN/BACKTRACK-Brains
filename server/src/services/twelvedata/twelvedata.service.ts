@@ -10,6 +10,7 @@ const INTERVALS: Record<Granularity, string> = {
   M5: '5min',
   M15: '15min',
   H1: '1h',
+  D1: '1day',
 };
 
 /** Our instrument ids ("XAU_USD") to Twelve Data symbols ("XAU/USD"). */

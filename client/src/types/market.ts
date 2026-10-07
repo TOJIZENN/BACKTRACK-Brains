@@ -1,4 +1,4 @@
-export const GRANULARITIES = ['M1', 'M5', 'M15', 'H1'] as const;
+export const GRANULARITIES = ['M1', 'M5', 'M15', 'H1', 'D1'] as const;
 export type Granularity = (typeof GRANULARITIES)[number];
 
 export const GRANULARITY_SECONDS: Record<Granularity, number> = {
@@ -6,6 +6,7 @@ export const GRANULARITY_SECONDS: Record<Granularity, number> = {
   M5: 300,
   M15: 900,
   H1: 3600,
+  D1: 86_400,
 };
 
 /** Candle as delivered by our backend (never a provider's raw shape). */

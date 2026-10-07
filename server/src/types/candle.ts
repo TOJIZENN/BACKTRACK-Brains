@@ -9,7 +9,7 @@ export interface Candle {
   volume: number;
 }
 
-export const GRANULARITIES = ['M1', 'M5', 'M15', 'H1'] as const;
+export const GRANULARITIES = ['M1', 'M5', 'M15', 'H1', 'D1'] as const;
 export type Granularity = (typeof GRANULARITIES)[number];
 
 export function isGranularity(value: unknown): value is Granularity {

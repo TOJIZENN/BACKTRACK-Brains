@@ -3,7 +3,7 @@ import type { Candle, Granularity } from '../../types/candle.js';
 import { aggregateCandles } from '../../utils/aggregate.js';
 import { MS_PER_SECOND, toIsoSeconds } from '../../utils/time.js';
 import type { HistoricalCandleSource } from '../candleSource.js';
-import type { DukascopyClient } from './dukascopy.client.js';
+import { bucketEnd, type DukascopyClient } from './dukascopy.client.js';
 import type { DukascopyCandleBucket, DukascopySource } from './dukascopy.types.js';
 
 /** Parallel bucket requests — polite to a free service while keeping loads quick. */
@@ -69,15 +69,19 @@ export function mergeMid(bid: RawCandle[], ask: RawCandle[], precision: number):
   return out;
 }
 
-/** UTC bucket starts (days or months) overlapping [fromMs, toMs). */
+/** UTC bucket starts (days, months or years) overlapping [fromMs, toMs). */
 export function bucketStarts(source: DukascopySource, fromMs: number, toMs: number): number[] {
   const starts: number[] = [];
   const d = new Date(fromMs);
-  let cursor = source === 'minute' ? Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) : Date.UTC(d.getUTCFullYear(), d.getUTCMonth());
+  let cursor =
+    source === 'minute'
+      ? Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+      : source === 'hour'
+        ? Date.UTC(d.getUTCFullYear(), d.getUTCMonth())
+        : Date.UTC(d.getUTCFullYear(), 0);
   while (cursor < toMs) {
     starts.push(cursor);
-    const c = new Date(cursor);
-    cursor = source === 'minute' ? Date.UTC(c.getUTCFullYear(), c.getUTCMonth(), c.getUTCDate() + 1) : Date.UTC(c.getUTCFullYear(), c.getUTCMonth() + 1);
+    cursor = bucketEnd(source, cursor);
   }
   return starts;
 }
@@ -99,13 +103,14 @@ const PRICE_PRECISION = 3;
 
 /**
  * Dukascopy candle source. M1/M5/M15 come from daily minute buckets (M5/M15 aggregated from M1 so all
- * timeframes agree); H1 comes from monthly hour buckets. Prices are mid (average of bid and ask).
+ * timeframes agree); H1 from monthly hour buckets; D1 from yearly day buckets (UTC days). Prices are
+ * mid (average of bid and ask).
  */
 export function createDukascopyCandleSource(client: DukascopyClient, now: () => number = Date.now): HistoricalCandleSource {
   return {
     async fetchCandles(instrument, granularity: Granularity, fromMs, toMs) {
       const code = toDukascopyCode(instrument);
-      const source: DukascopySource = granularity === 'H1' ? 'hour' : 'minute';
+      const source: DukascopySource = granularity === 'D1' ? 'day' : granularity === 'H1' ? 'hour' : 'minute';
       const buckets = bucketStarts(source, fromMs, Math.min(toMs, now()));
 
       const perBucket = await mapLimited(buckets, MAX_CONCURRENT_REQUESTS, async (start) => {
@@ -117,7 +122,8 @@ export function createDukascopyCandleSource(client: DukascopyClient, now: () => 
       });
 
       const base = perBucket.flat().sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
-      const candles = granularity === 'M1' || granularity === 'H1' ? base : aggregateCandles(base, GRANULARITY_SECONDS[granularity]);
+      const native = granularity === 'M1' || granularity === 'H1' || granularity === 'D1';
+      const candles = native ? base : aggregateCandles(base, GRANULARITY_SECONDS[granularity]);
       const durationMs = GRANULARITY_SECONDS[granularity] * MS_PER_SECOND;
       const nowMs = now();
       // Only completed candles inside the requested range.
