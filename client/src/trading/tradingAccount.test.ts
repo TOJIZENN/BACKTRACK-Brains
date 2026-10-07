@@ -144,3 +144,15 @@ describe('computeStats', () => {
     expect(computeStats(acc.getTrades(), 10_000, 10_200).profitFactor).toBe(Infinity);
   });
 });
+
+describe('TradingAccount across timeframes', () => {
+  it('never resolves a trade against a bar that opened before the fill (e.g. after switching M5 → H1)', () => {
+    const acc = new TradingAccount(10_000, 'SL_FIRST', XAU_USD);
+    // Filled at the close of candle 5 (time of candle 6)
+    acc.openTrade({ side: 'LONG', stopLoss: 95, takeProfit: 110, riskPercent: 1 }, quoteAt(5, 100));
+    // A higher-timeframe bar that opened at candle 4's time spans the fill — must be ignored.
+    expect(acc.processCandle({ ...makeCandle(4), open: 100, high: 120, low: 80, close: 100 })).toEqual([]);
+    // A bar opening exactly at the fill time counts.
+    expect(acc.processCandle({ ...makeCandle(6), open: 100, high: 111, low: 99, close: 110 })[0]?.exitReason).toBe('TAKE_PROFIT');
+  });
+});

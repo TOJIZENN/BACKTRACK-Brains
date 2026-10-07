@@ -65,6 +65,8 @@ export class ReplaySession {
   #error: string | null = null;
   /** Automatic prefetch retries are suppressed until this time after a failure. */
   #retryAfterMs = 0;
+  /** Settles when the in-flight forward fetch finishes (null when idle). */
+  #prefetchPromise: Promise<void> | null = null;
   #disposed = false;
   #playing = false;
   #runId = 0;
@@ -135,6 +137,41 @@ export class ReplaySession {
     this.#playing = false;
     this.#player.stop();
     this.#emit();
+  }
+
+  /** Replay clock: close time (ms) of the latest revealed candle — everything before it has "happened". */
+  clockMs(): number {
+    return (this.#engine.getLiveEdgeCandle().time + GRANULARITY_SECONDS[this.setup.granularity]) * 1000;
+  }
+
+  /**
+   * Prepares a switch to a timeframe of `barSeconds`: returns to the live edge, then keeps revealing
+   * candles (resolving trades on each, exactly like Next) until the clock reaches the next bar boundary
+   * of the new timeframe. That way the new timeframe never shows a bar that is partly in the future,
+   * and open trades are never resolved against prices from before their fill. Stops early at gaps
+   * (weekends) and at the true end of the data.
+   */
+  async alignClockTo(barSeconds: number): Promise<{ clockMs: number; advancedBars: number }> {
+    this.pause();
+    while (!this.#engine.getState().atLiveEdge && this.#engine.next()) {
+      // Re-showing already revealed candles: nothing to resolve.
+    }
+    const targetSec = Math.ceil(this.clockMs() / 1000 / barSeconds) * barSeconds;
+    let advancedBars = 0;
+    while (this.clockMs() / 1000 < targetSec && !this.#disposed) {
+      if (this.#engine.hasNext()) {
+        if (!this.#engine.nextCandleOpensBefore(targetSec)) break; // gap: the bar is already complete
+        this.#step();
+        advancedBars += 1;
+        continue;
+      }
+      if (!this.#loadingMore) this.#maybePrefetch(true);
+      if (!this.#prefetchPromise || !this.#loadingMore) break; // end of data
+      await this.#prefetchPromise;
+      if (this.#error) break;
+    }
+    this.#emit();
+    return { clockMs: this.clockMs(), advancedBars };
   }
 
   /** Retries loading forward data immediately (e.g. after a network or rate-limit error). */
@@ -263,7 +300,7 @@ export class ReplaySession {
     }
 
     this.#loadingMore = true;
-    this.#fetchCandles(this.setup.instrument, this.setup.granularity, fromMs, toMs)
+    this.#prefetchPromise = this.#fetchCandles(this.setup.instrument, this.setup.granularity, fromMs, toMs)
       .then((candles) => {
         if (this.#disposed) return;
         this.#loadedUntilMs = toMs;
@@ -284,6 +321,7 @@ export class ReplaySession {
       .finally(() => {
         if (this.#disposed) return;
         this.#loadingMore = false;
+        this.#prefetchPromise = null;
         if (this.#error === null) this.#maybePrefetch();
         this.#emit();
       });

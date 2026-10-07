@@ -9,6 +9,7 @@ const setup: SessionSetup = {
   instrument: 'XAU_USD',
   granularity: 'M5',
   startMs: Date.parse('2026-01-15T01:00:00Z'),
+  runStartMs: Date.parse('2026-01-15T01:00:00Z'),
   startingBalance: 10_000,
   riskPercent: 1,
   sameCandleRule: 'SL_FIRST',
@@ -207,5 +208,44 @@ describe('ReplaySession trading', () => {
     if (!opened.ok) throw new Error('order failed');
     const closed = s.closeTrade(opened.trade.id);
     expect(closed.ok && closed.trade).toMatchObject({ exitReason: 'MANUAL', exitPrice: 104, pnl: 40 });
+  });
+});
+
+describe('ReplaySession.alignClockTo (timeframe switch)', () => {
+  // M5 candles from 00:00; candle i closes at (i+1)*5 min.
+  const H1 = 3600;
+
+  it('advances to the next bar boundary of the new timeframe, resolving trades on the way', async () => {
+    const candles = makeCandles(40);
+    candles[9] = { ...candles[9], low: 50 }; // wick through the stop at 00:45
+    const s = new ReplaySession(setup, candles, 6, 0, vi.fn<CandleFetcher>(async () => []), FAR_FUTURE); // clock 00:35
+    s.placeOrder({ side: 'LONG', stopLoss: 97, takeProfit: 200, riskPercent: 1 });
+    const { clockMs, advancedBars } = await s.alignClockTo(H1);
+    expect(new Date(clockMs).toISOString()).toBe('2026-01-15T01:00:00.000Z');
+    expect(advancedBars).toBe(5);
+    expect(s.getSnapshot().trades[0].exitReason).toBe('STOP_LOSS');
+  });
+
+  it('does nothing when already on a boundary', async () => {
+    const s = new ReplaySession(setup, makeCandles(40), 11, 0, vi.fn<CandleFetcher>(async () => []), FAR_FUTURE); // clock 01:00
+    expect(await s.alignClockTo(H1)).toEqual({ clockMs: Date.parse('2026-01-15T01:00:00Z'), advancedBars: 0 });
+  });
+
+  it('stops at a gap instead of jumping over it (e.g. weekend close)', async () => {
+    const candles = makeCandles(8); // 00:00 .. 00:35
+    const afterGap = { ...makeCandle(8), time: makeCandle(8).time + 10 * H1 };
+    const s = new ReplaySession(setup, [...candles, afterGap], 5, 0, vi.fn<CandleFetcher>(async () => []), FAR_FUTURE);
+    const { clockMs } = await s.alignClockTo(H1);
+    expect(new Date(clockMs).toISOString()).toBe('2026-01-15T00:40:00.000Z'); // last candle before the gap
+  });
+
+  it('returns to the live edge first and never re-resolves reviewed candles', async () => {
+    const s = new ReplaySession(setup, makeCandles(40), 6, 0, vi.fn<CandleFetcher>(async () => []), FAR_FUTURE);
+    s.next();
+    s.previous();
+    s.previous();
+    await s.alignClockTo(900); // M15
+    expect(s.getSnapshot().replay.atLiveEdge).toBe(true);
+    expect(new Date(s.clockMs()).toISOString()).toBe('2026-01-15T00:45:00.000Z');
   });
 });

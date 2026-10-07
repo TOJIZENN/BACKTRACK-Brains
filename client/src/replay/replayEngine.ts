@@ -77,6 +77,14 @@ export class ReplayEngine {
     return this.#candles[this.#maxRevealedIndex];
   }
 
+  /**
+   * Whether the next loaded candle opens before `timeSec`. Used only to stop at a timeframe boundary
+   * when switching timeframes; it never exposes the candle itself.
+   */
+  nextCandleOpensBefore(timeSec: number): boolean {
+    return this.hasNext() && this.#candles[this.#currentIndex + 1].time < timeSec;
+  }
+
   hasNext(): boolean {
     return this.#currentIndex < this.#candles.length - 1;
   }

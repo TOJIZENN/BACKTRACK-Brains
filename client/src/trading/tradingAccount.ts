@@ -125,13 +125,15 @@ export class TradingAccount {
   }
 
   /**
-   * Resolves open trades against a NEWLY revealed candle. Must be called once per new candle,
-   * in order, and never for the candle a trade was entered on. Returns trades closed by it.
+   * Resolves open trades against a NEWLY revealed candle. Must be called once per new candle, in order.
+   * Only candles that open at or after a trade's fill time can touch it — this holds across timeframe
+   * switches too (a trade filled at 10:35 is never resolved by a bar that opened at 10:00).
    */
   processCandle(candle: Candle): Trade[] {
     const closed: Trade[] = [];
+    const candleOpenMs = candle.time * 1000;
     this.#trades = this.#trades.map((trade) => {
-      if (trade.status !== 'OPEN' || candle.time <= trade.entryCandleTime) return trade;
+      if (trade.status !== 'OPEN' || candleOpenMs < Date.parse(trade.entryTime)) return trade;
       const fill = resolveExit(trade, candle, this.sameCandleRule);
       if (!fill) return trade;
       const result = this.#close(trade, fill.price, candle, fill.reason, fill.ambiguous);

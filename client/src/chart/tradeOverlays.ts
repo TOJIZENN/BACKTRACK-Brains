@@ -26,27 +26,49 @@ export function draftLines(stopLoss: number, takeProfit: number): ChartPriceLine
   return lines;
 }
 
+/** Open time of the visible bar containing `time` (bars may be another timeframe than the trade's). */
+function containingBar(time: number, bars: readonly { time: number }[]): number | null {
+  let lo = 0;
+  let hi = bars.length - 1;
+  let found: number | null = null;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (bars[mid].time <= time) {
+      found = bars[mid].time;
+      lo = mid + 1;
+    } else hi = mid - 1;
+  }
+  return found;
+}
+
 /**
- * Entry and exit markers. Only markers at or before `maxTime` are returned, so stepping back
- * in the replay never shows an exit that has not "happened" yet on screen.
+ * Entry and exit markers, snapped to the visible bars (trades may come from another timeframe).
+ * Only markers at or before the current bar are returned, so stepping back in the replay never shows
+ * an exit that has not "happened" yet on screen.
  */
-export function tradeMarkers(trades: readonly Trade[], maxTime: number): ChartMarker[] {
+export function tradeMarkers(trades: readonly Trade[], bars: readonly { time: number }[], barSeconds: number): ChartMarker[] {
   const markers: ChartMarker[] = [];
+  const last = bars.at(-1);
+  if (!last) return markers;
+  // Anything before the end of the current bar has happened (covers lower-timeframe events inside it).
+  const happened = (time: number) => time < last.time + barSeconds;
   for (const t of trades) {
-    if (t.entryCandleTime <= maxTime) {
+    const entryBar = containingBar(t.entryCandleTime, bars);
+    if (entryBar !== null && happened(t.entryCandleTime)) {
       const isLong = t.side === 'LONG';
       markers.push({
-        time: t.entryCandleTime,
+        time: entryBar,
         position: isLong ? 'belowBar' : 'aboveBar',
         shape: isLong ? 'arrowUp' : 'arrowDown',
         color: isLong ? CHART_COLORS.bull : CHART_COLORS.bear,
         text: `#${t.number}`,
       });
     }
-    if (t.status === 'CLOSED' && t.exitCandleTime !== null && t.exitCandleTime <= maxTime) {
+    const exitBar = t.exitCandleTime === null ? null : containingBar(t.exitCandleTime, bars);
+    if (t.status === 'CLOSED' && exitBar !== null && happened(t.exitCandleTime!)) {
       const won = (t.pnl ?? 0) > 0;
       markers.push({
-        time: t.exitCandleTime,
+        time: exitBar,
         position: t.side === 'LONG' ? 'aboveBar' : 'belowBar',
         shape: 'circle',
         color: won ? CHART_COLORS.bull : CHART_COLORS.bear,

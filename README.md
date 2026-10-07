@@ -22,6 +22,8 @@ It is **not** an automated strategy tester: every trading decision is made by yo
   plus a "random date" button
 - Strict **no-lookahead** replay: only closed candles up to the replay point are ever rendered
 - Controls: Play / Pause, Next, Previous, Reset, speed 0.5x / 1x / 2x / 5x / 10x, Jump to date
+- **Dynamic timeframe switching** mid-replay (1m · 5m · 15m · 1h in the top bar), keeping the replay time,
+  balance, open positions, drawings and speed
 - Forward data is prefetched in the background, so a replay can run across days and weekends
 - Market BUY / SELL with SL and TP, live position-size, risk, potential-profit and R:R preview
 - Automatic SL/TP detection on every new candle, with a configurable **same-candle rule**
@@ -221,6 +223,24 @@ UTC, London, New York, Dubai, Singapore or Tokyo. The zone applies to:
 Only display and input change. Requests to the server, the candle cache and all trade data stay in UTC,
 so switching zones never changes which candles you get. For example, a 15:30 IST start is the same replay
 as a 10:00 UTC start. Zones with daylight saving are handled per timestamp. IST has none.
+
+## Timeframe Switching
+
+Use the **1m · 5m · 15m · 1h** buttons in the top bar to change timeframe at any point, like TradingView.
+The replay continues from the same moment, and your balance, trade history, **open positions**, drawings
+and replay speed carry over.
+
+- **To a lower timeframe** (e.g. 1h → 5m) the switch is exact: you see the 5m bars up to the current time.
+- **To a higher timeframe in the middle of a bar** (e.g. 5m at 10:35 → 1h), the current 1h bar would
+  contain prices from before *and* after 10:35. So the replay first finishes that bar on the timeframe
+  you were on: it reveals the remaining 5m candles up to 11:00 exactly as if you had pressed Next,
+  resolving SL/TP on each. Then it switches. A notice says how far it advanced. It never jumps over a gap
+  (e.g. a weekend). TradingView instead shows a partially formed bar, which would need 1-minute data
+  loaded for every timeframe.
+- Trades are only resolved by bars that open at or after their fill time, so an open position is never
+  hit by prices from before it was entered, whatever timeframe you are on. Entry/exit markers snap to the
+  bar that contains them.
+- **Reset** returns to the run's original start on the current timeframe with a fresh account. Drawings stay.
 
 ## Chart Settings
 

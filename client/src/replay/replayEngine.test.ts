@@ -115,3 +115,14 @@ describe('ReplayEngine', () => {
     expect(engine.getVisibleCandles()).not.toBe(first);
   });
 });
+
+describe('ReplayEngine.nextCandleOpensBefore', () => {
+  it('reports only whether the next bar starts before a boundary', () => {
+    const candles = makeCandles(5);
+    const engine = new ReplayEngine(candles, 1);
+    expect(engine.nextCandleOpensBefore(candles[2].time + 1)).toBe(true);
+    expect(engine.nextCandleOpensBefore(candles[2].time)).toBe(false);
+    const atEnd = new ReplayEngine(candles, 4);
+    expect(atEnd.nextCandleOpensBefore(Number.MAX_SAFE_INTEGER)).toBe(false);
+  });
+});
