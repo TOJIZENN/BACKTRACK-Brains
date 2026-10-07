@@ -213,7 +213,14 @@ export function ReplayPage({ session, onExit, onJump, jumping, jumpError, onDism
         onReset={requestReset}
         onSpeedChange={(speed) => session.setSpeed(speed)}
       />
-      <BottomPanel snapshot={snapshot} instrument={instrument} />
+      <BottomPanel
+        snapshot={snapshot}
+        instrument={instrument}
+        height={panel.layout.bottomHeight}
+        collapsed={panel.layout.bottomCollapsed}
+        onResize={panel.setBottomHeight}
+        onToggleCollapsed={panel.toggleBottomCollapsed}
+      />
 
       {dialog === 'help' && <ShortcutsHelp onClose={closeDialog} />}
       {dialog === 'settings' && <ChartSettingsDialog settings={chartSettings} onChange={setChartSettings} onClose={closeDialog} />}

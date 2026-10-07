@@ -36,8 +36,9 @@ It is **not** an automated strategy tester: every trading decision is made by yo
   crosshair and scale text, plus presets (TradingView dark/light, classic, monochrome). Saved in the browser
 - **Drawing tools**: trend line, ray, horizontal line, vertical line, rectangle, path and Fib retracement;
   select, drag, recolour, change width, delete
-- **Flexible layout**: drag the divider between the chart and the order panel to resize it, or collapse the
-  panel (› button) to give the chart the full width; collapse the bottom panel for full height. The layout is remembered
+- **Flexible layout** (desktop): drag the divider between the chart and the order panel to resize it, or
+  collapse the panel (› button) for full width. Drag the *Trades & performance* strip up/down to resize the
+  bottom panel; drag it all the way down (or double-click it) to collapse it for full height. The layout is remembered
 
 ## Architecture
 
