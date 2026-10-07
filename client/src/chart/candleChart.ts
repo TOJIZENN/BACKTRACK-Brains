@@ -131,6 +131,11 @@ export class CandleChart {
     this.#drawingLayer.setHandleFill(s.background);
   }
 
+  /** Chart timeframe changed: same chart and drawings, new bar duration. */
+  setBarSeconds(seconds: number): void {
+    this.#drawingLayer.setBarSeconds(seconds);
+  }
+
   // ---- drawings ----
   setDrawingTool(tool: DrawingTool): void {
     this.#drawings.setTool(tool);

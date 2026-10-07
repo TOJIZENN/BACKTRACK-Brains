@@ -52,14 +52,25 @@ export function CandleChartView(props: Props) {
     });
     instanceRef.current = chart;
     if (chartRef) chartRef.current = chart;
+    // A (re)created chart starts empty: push everything the effects below would otherwise only send on change.
+    const p = latest.current;
+    chart.setCandles(p.candles);
+    chart.setPriceLines(p.priceLines ?? []);
+    chart.setMarkers(p.markers ?? []);
+    chart.setDrawingTool(p.tool);
+    chart.setDrawings(p.drawings);
+    chart.focusLatest(INITIAL_VISIBLE_BARS);
     return () => {
       chart.destroy();
       instanceRef.current = null;
       if (chartRef) chartRef.current = null;
     };
-  }, [pricePrecision, timeZone, barSeconds, chartRef]);
+    // barSeconds is applied by its own effect: a timeframe change must not rebuild the chart.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pricePrecision, timeZone, chartRef]);
 
   useEffect(() => instanceRef.current?.applySettings(settings), [settings]);
+  useEffect(() => instanceRef.current?.setBarSeconds(barSeconds), [barSeconds]);
   useEffect(() => instanceRef.current?.setCandles(candles), [candles]);
   useEffect(() => instanceRef.current?.focusLatest(INITIAL_VISIBLE_BARS), [focusKey]);
   useEffect(() => instanceRef.current?.setPriceLines(priceLines), [priceLines]);

@@ -35,7 +35,7 @@ interface Timed {
 export class DrawingLayer implements ISeriesPrimitive<Time> {
   readonly #chart: IChartApi;
   readonly #series: ISeriesApi<'Candlestick'>;
-  readonly #barSeconds: number;
+  #barSeconds: number;
   #pricePrecision: number;
   #bars: readonly Timed[] = [];
   #drawings: readonly Drawing[] = [];
@@ -74,6 +74,12 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
     this.#drawings = drawings;
     this.#draft = draft;
     this.#selectedId = selectedId;
+    this.update();
+  }
+  /** Bar duration of the chart timeframe (used to place anchors beyond the last bar). */
+  setBarSeconds(seconds: number): void {
+    if (seconds === this.#barSeconds) return;
+    this.#barSeconds = seconds;
     this.update();
   }
   setHandleFill(color: string): void {
