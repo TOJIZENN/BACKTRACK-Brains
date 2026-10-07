@@ -27,7 +27,7 @@ export const GRANULARITY_SECONDS: Record<Granularity, number> = {
 
 /** Upper bound on the span of a single /api/candles request, to keep responses reasonable. */
 export const MAX_REQUEST_DAYS: Record<Granularity, number> = {
-  M1: 7,
+  M1: 16,
   M5: 31,
   M15: 92,
   H1: 366,

@@ -22,8 +22,8 @@ It is **not** an automated strategy tester: every trading decision is made by yo
   plus a "random date" button
 - Strict **no-lookahead** replay: only closed candles up to the replay point are ever rendered
 - Controls: Play / Pause, Next, Previous, Reset, speed 0.5x / 1x / 2x / 5x / 10x, Jump to date
-- **Dynamic timeframe switching** mid-replay (1m · 5m · 15m · 1h in the top bar), keeping the replay time,
-  balance, open positions, drawings and speed
+- **TradingView-style timeframe switching** mid-replay (1m · 5m · 15m · 1h in the top bar): instant,
+  with a live forming bar; replays run on 1-minute data, so SL/TP are resolved minute by minute
 - Forward data is prefetched in the background, so a replay can run across days and weekends
 - Market BUY / SELL with SL and TP, live position-size, risk, potential-profit and R:R preview
 - Automatic SL/TP detection on every new candle, with a configurable **same-candle rule**
@@ -218,7 +218,7 @@ Delete the cache folder at any time to force a refetch.
 | ------- | --- |
 | Error mentions **`OANDA_API_KEY`** although you use Twelve Data | You are running code from before the Twelve Data switch: `git pull`, then restart `npm run dev`. Also check that `.env` says `DATA_PROVIDER=twelvedata`. |
 | `TWELVE_DATA_API_KEY is not configured` | The server didn't find your `.env`. Check the startup log line `Loaded settings from …` and put `.env` in the repo root. |
-| `RATE_LIMITED` | Free plan allows 8 requests/minute. Wait a minute; cached days don't count against the limit. |
+| `RATE_LIMITED` | Twelve Data's free plan allows 8 requests/minute. Wait a minute (cached days don't count), or switch to the default `DATA_PROVIDER=dukascopy`. |
 | `Could not load more candles` during a replay | Press **Retry** on the banner, or Next/Play at the end of the loaded data. Automatic retries back off for 15 s. |
 
 ## Running Frontend
@@ -246,21 +246,21 @@ as a 10:00 UTC start. Zones with daylight saving are handled per timestamp. IST 
 
 ## Timeframe Switching
 
-Use the **1m · 5m · 15m · 1h** buttons in the top bar to change timeframe at any point, like TradingView.
-The replay continues from the same moment, and your balance, trade history, **open positions**, drawings
-and replay speed carry over.
+Use the **1m · 5m · 15m · 1h** buttons in the top bar to change timeframe at any moment, like TradingView.
 
-- **To a lower timeframe** (e.g. 1h → 5m) the switch is exact: you see the 5m bars up to the current time.
-- **To a higher timeframe in the middle of a bar** (e.g. 5m at 10:35 → 1h), the current 1h bar would
-  contain prices from before *and* after 10:35. So the replay first finishes that bar on the timeframe
-  you were on: it reveals the remaining 5m candles up to 11:00 exactly as if you had pressed Next,
-  resolving SL/TP on each. Then it switches. A notice says how far it advanced. It never jumps over a gap
-  (e.g. a weekend). TradingView instead shows a partially formed bar, which would need 1-minute data
-  loaded for every timeframe.
-- Trades are only resolved by bars that open at or after their fill time, so an open position is never
-  hit by prices from before it was entered, whatever timeframe you are on. Entry/exit markers snap to the
-  bar that contains them.
-- **Reset** returns to the run's original start on the current timeframe with a fresh account. Drawings stay.
+Every replay runs on **1-minute candles**. The chart timeframe is just a view that aggregates them, so:
+
+- **Switching is instant and never jumps ahead.** Switch from 5m to 1h at 15:50 and you see the 15:30
+  hour bar **forming**: it holds only the 20 minutes revealed so far, exactly like TradingView's replay.
+  No minute after the replay clock is ever used.
+- **Next / Previous move one bar of the chart timeframe.** Right after a switch, Next first completes the
+  forming bar, then each press reveals one full bar. Play advances one bar per tick.
+- **SL/TP are checked minute by minute** whatever timeframe you view. An open position is resolved in
+  the minute it is actually hit, so the same-candle rule is rarely needed. It applies only when both
+  levels fall inside the same minute.
+- Balance, trade history, open positions, drawings and replay speed are untouched by a switch. Trade
+  markers snap to the bar that contains them. **Reset** returns to the start of the run.
+- "Replayed 2h 15m" in the controls shows the time replayed since the start, the same on every timeframe.
 
 ## Chart Settings
 
@@ -304,24 +304,26 @@ pans as usual.
 
 `client/src/replay/replayEngine.ts` is the core of the app.
 
-- It receives the full loaded dataset and keeps it in a **JavaScript private field** (`#candles`).
+- It receives the loaded **1-minute** dataset and keeps it in a **JavaScript private field** (`#candles`).
   Nothing outside the class can read candles beyond the current position.
-- `getVisibleCandles()` returns a frozen `candles.slice(0, currentIndex + 1)`. This is the only data the
-  chart receives. Future candles are never sent to React and hidden in the UI; they never reach React at all.
-- **Start point:** the replay starts at the **last candle that has fully closed** at your chosen time.
-  On M5 with a 15:30 IST start, the last visible candle is the 15:25 candle. The 10:00 candle would contain
-  price action after 10:00, so it stays hidden.
-- `next()` reveals exactly one candle. `previous()` steps back for review. `reset()` returns to the
-  starting point.
-- **High-water mark (`maxRevealedIndex`):** stepping back and then forward again re-shows candles that
+- `getVisibleCandles()` returns a frozen `candles.slice(0, currentIndex + 1)`. The session aggregates this
+  slice to the chart timeframe (`utils/aggregate.ts`), and that is the only data the chart receives.
+  Future candles never reach React.
+- **Start point:** the replay starts at the **last minute that has fully closed** at your chosen time.
+  With a 15:30 IST start, the latest revealed minute is 15:29, so the 5m chart ends with the 15:25 bar.
+- The engine reveals one minute at a time. `ReplaySession` turns that into chart bars: Next reveals
+  minutes up to the end of the next bar, and Previous steps back to the end of the previous bar. Each newly
+  revealed minute resolves open trades exactly once.
+- **High-water mark (`maxRevealedIndex`):** stepping back and then forward again re-shows minutes that
   were already seen. Those are flagged `isNew: false`, so trades are never resolved twice. New orders are
   only accepted at the **live edge** (`currentIndex === maxRevealedIndex`). Otherwise you could peek
   ahead, step back, and trade with hindsight.
-- **Speed:** each candle is revealed every `1000 ms / speed` (0.5x = 2 s, 10x = 100 ms). Playback timing
-  lives in `ReplayPlayer`, which uses a `setTimeout` chain so speed changes apply on the next candle.
-- **Forward data:** the session loads some history before the start (e.g. 4 days on M5) and a forward
-  window, then prefetches the next window in the background when fewer than 200 unrevealed candles remain.
-  Playback waits if it reaches the end of the buffer while a fetch is in flight.
+- **Speed:** one chart bar is revealed every `1000 ms / speed` (0.5x = 2 s, 10x = 100 ms). Playback timing
+  lives in `ReplayPlayer`, which uses a `setTimeout` chain so speed changes apply on the next bar.
+- **Forward data:** the session loads 8 days of 1-minute history before the start (about 140 hourly bars
+  of context) and 5 days ahead. It prefetches the next 5 days in the background when fewer than about
+  40 chart bars remain buffered. Playback waits if it reaches the end of the buffer while a fetch is in
+  flight.
 - **Random replay:** `pickRandomStartIndex()` exists in `replay/startIndex.ts`. The setup screen also has a
   "random date & time" picker.
 
@@ -364,6 +366,9 @@ The active rule appears in the replay header. Trades decided by it are marked **
 history, and their notification says "(same-candle rule)". The rule applies only when the candle opened
 between SL and TP. Gaps are handled as described above.
 
+Because trades are resolved on **1-minute** candles (see Timeframe Switching), the ambiguous case only
+happens when SL and TP are both touched within the same minute, whatever chart timeframe you trade on.
+
 ## Risk/P&L Calculation
 
 For XAU/USD, 1 unit = 1 troy ounce and P&L is in USD (`quoteValuePerUnit = 1`).
@@ -403,8 +408,8 @@ Shortcuts are ignored while typing in an input. Press Esc first.
 
 - **Single price feed (no bid/ask), no spread, commission, swap or slippage.** Results are optimistic compared with real
   execution, especially for tight scalping stops on M1/M5.
-- OHLC data hides the path inside a candle. That is why the same-candle rule exists. Lower timeframes reduce
-  the ambiguity.
+- OHLC data hides the path inside a candle. That is why the same-candle rule exists. Resolving trades on
+  1-minute data keeps the ambiguity to a single minute.
 - Market entries only, filled at candle close. No limit or stop entries, trailing stops, partial closes or
   break-even moves yet.
 - Position size has no margin, leverage or minimum lot checks.
@@ -413,7 +418,10 @@ Shortcuts are ignored while typing in an input. Press Esc first.
   for display, which is the standard approach for Lightweight Charts.
 - Sessions are kept in memory. Reloading the page or starting a new session discards the trade journal.
 - Only XAU/USD is configured, although the data layer and UI are instrument-agnostic.
-- With no provider API key the app cannot load data. There is no offline or sample dataset.
+- The app needs internet access to Dukascopy (or a configured Twelve Data / OANDA key). Once a day has
+  been downloaded it is served from the local cache. There is no bundled sample dataset.
+- Dukascopy's data API is free but unofficial and undocumented; if its format changes, the provider needs
+  updating. Twelve Data and OANDA remain available via `DATA_PROVIDER`.
 
 ## Future Improvements
 

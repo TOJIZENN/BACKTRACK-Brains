@@ -1,7 +1,7 @@
 import { REPLAY_SPEEDS, type ReplaySpeed } from '../replay/replayEngine';
 import type { ReplaySnapshot } from '../store/replaySession';
 import { useTimeZone } from '../hooks/useTimeZone';
-import { formatDateTime } from '../utils/format';
+import { formatDateTime, formatDuration } from '../utils/format';
 import { Button } from './ui/Button';
 import { Icon } from './ui/Icon';
 import { Spinner } from './ui/Spinner';
@@ -19,7 +19,6 @@ export function ReplayControls({ snapshot, onPlayPause, onNext, onPrevious, onRe
   const { replay, currentCandle, loadingMore, dataExhausted, canAdvance } = snapshot;
   const playing = replay.status === 'playing';
   const timeZone = useTimeZone();
-  const revealedCount = replay.maxRevealedIndex - replay.startIndex;
 
   return (
     <div className="flex flex-wrap items-center gap-3 border-t border-terminal-border bg-terminal-panel px-4 py-2 max-lg:sticky max-lg:bottom-0 max-lg:z-30 max-lg:gap-2 max-lg:px-2">
@@ -70,7 +69,7 @@ export function ReplayControls({ snapshot, onPlayPause, onNext, onPrevious, onRe
           </span>
         )}
         <span className="text-terminal-muted">
-          Bars replayed: <span className="font-mono text-terminal-text">{revealedCount}</span>
+          Replayed <span className="font-mono text-terminal-text" data-testid="elapsed">{formatDuration(snapshot.elapsedMs)}</span>
         </span>
         <span className="font-mono text-terminal-text" data-testid="current-candle-time">
           {formatDateTime(currentCandle.timestamp, timeZone)}

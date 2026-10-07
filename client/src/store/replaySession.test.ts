@@ -3,13 +3,12 @@ import { makeCandle, makeCandles } from '../test/fixtures';
 import type { SessionSetup } from '../types/session';
 import { ReplaySession, type CandleFetcher } from './replaySession';
 import { loadReplaySession, SessionLoadError } from '../services/sessionLoader';
-import { PREFETCH_THRESHOLD_CANDLES } from '../replay/dataWindow';
+import { prefetchThreshold } from '../replay/dataWindow';
 
 const setup: SessionSetup = {
   instrument: 'XAU_USD',
   granularity: 'M5',
   startMs: Date.parse('2026-01-15T01:00:00Z'),
-  runStartMs: Date.parse('2026-01-15T01:00:00Z'),
   startingBalance: 10_000,
   riskPercent: 1,
   sameCandleRule: 'SL_FIRST',
@@ -46,7 +45,7 @@ describe('ReplaySession', () => {
 
   it('does not prefetch while the buffer is healthy', () => {
     const fetcher = vi.fn<CandleFetcher>(async () => []);
-    new ReplaySession(setup, makeCandles(PREFETCH_THRESHOLD_CANDLES + 20), 0, 0, fetcher, FAR_FUTURE);
+    new ReplaySession(setup, makeCandles(prefetchThreshold(300) + 20), 0, 0, fetcher, FAR_FUTURE);
     expect(fetcher).not.toHaveBeenCalled();
   });
 
@@ -118,7 +117,7 @@ describe('loadReplaySession', () => {
   });
 
   it.each([
-    [[], 'No M5 candles found'],
+    [[], 'No candles found'],
     [makeCandles(48).slice(13), 'No completed candles before'],
     [makeCandles(12), 'No candles after'],
   ])('explains unusable periods %#', async (data, message) => {
@@ -139,13 +138,14 @@ describe('ReplaySession trading', () => {
   }
   const order = { side: 'LONG' as const, stopLoss: 97, takeProfit: 112, riskPercent: 1 };
 
-  it('fills market orders at the current candle close, timestamped at its close time', () => {
+  it('fills market orders at the current close', () => {
     const s = session();
     const result = s.placeOrder(order);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.trade.entryPrice).toBe(102);
-    expect(result.trade.entryTime).toBe('2026-01-15T00:15:00Z');
+    // Fill time = close of the latest revealed minute (covered in detail by the 1-minute tests below).
+    expect(result.trade.entryTime).toBe('2026-01-15T00:11:00Z');
     expect(s.getSnapshot().trades).toHaveLength(1);
     expect(s.getSnapshot().events.at(-1)?.kind).toBe('opened');
   });
@@ -211,41 +211,84 @@ describe('ReplaySession trading', () => {
   });
 });
 
-describe('ReplaySession.alignClockTo (timeframe switch)', () => {
-  // M5 candles from 00:00; candle i closes at (i+1)*5 min.
-  const H1 = 3600;
+// ---- 1-minute base with an aggregated chart timeframe ----
 
-  it('advances to the next bar boundary of the new timeframe, resolving trades on the way', async () => {
-    const candles = makeCandles(40);
-    candles[9] = { ...candles[9], low: 50 }; // wick through the stop at 00:45
-    const s = new ReplaySession(setup, candles, 6, 0, vi.fn<CandleFetcher>(async () => []), FAR_FUTURE); // clock 00:35
-    s.placeOrder({ side: 'LONG', stopLoss: 97, takeProfit: 200, riskPercent: 1 });
-    const { clockMs, advancedBars } = await s.alignClockTo(H1);
-    expect(new Date(clockMs).toISOString()).toBe('2026-01-15T01:00:00.000Z');
-    expect(advancedBars).toBe(5);
-    expect(s.getSnapshot().trades[0].exitReason).toBe('STOP_LOSS');
+const T0 = Date.parse('2026-01-15T00:00:00Z') / 1000;
+/** Minute candles from 00:00 UTC with OHLC = 100 + i (overrides by index). */
+function minutes(n: number, over: Record<number, Partial<{ open: number; high: number; low: number; close: number }>> = {}) {
+  return Array.from({ length: n }, (_, i) => {
+    const time = T0 + i * 60;
+    const p = 100 + i;
+    return { time, timestamp: new Date(time * 1000).toISOString().replace('.000Z', 'Z'), open: p, high: p, low: p, close: p, volume: 1, ...over[i] };
+  });
+}
+const m1Session = (candles: ReturnType<typeof minutes>, startIndex: number, granularity: SessionSetup['granularity']) =>
+  new ReplaySession({ ...setup, granularity }, candles, startIndex, 0, vi.fn<CandleFetcher>(async () => []), FAR_FUTURE);
+const hhmm = (sec: number) => new Date(sec * 1000).toISOString().slice(11, 16);
+
+describe('ReplaySession on 1-minute data with a chart timeframe', () => {
+  it('aggregates revealed minutes into chart bars, with the last bar forming', () => {
+    const s = m1Session(minutes(200), 36, 'M15'); // last revealed minute 00:36 → clock 00:37
+    const bars = s.getSnapshot().visibleCandles;
+    expect(bars.map((b) => hhmm(b.time))).toEqual(['00:00', '00:15', '00:30']);
+    expect(bars[2]).toMatchObject({ open: 130, high: 136, low: 130, close: 136 }); // 00:30–00:36 only
+    expect(new Date(s.getSnapshot().clockMs).toISOString().slice(11, 16)).toBe('00:37');
   });
 
-  it('does nothing when already on a boundary', async () => {
-    const s = new ReplaySession(setup, makeCandles(40), 11, 0, vi.fn<CandleFetcher>(async () => []), FAR_FUTURE); // clock 01:00
-    expect(await s.alignClockTo(H1)).toEqual({ clockMs: Date.parse('2026-01-15T01:00:00Z'), advancedBars: 0 });
-  });
-
-  it('stops at a gap instead of jumping over it (e.g. weekend close)', async () => {
-    const candles = makeCandles(8); // 00:00 .. 00:35
-    const afterGap = { ...makeCandle(8), time: makeCandle(8).time + 10 * H1 };
-    const s = new ReplaySession(setup, [...candles, afterGap], 5, 0, vi.fn<CandleFetcher>(async () => []), FAR_FUTURE);
-    const { clockMs } = await s.alignClockTo(H1);
-    expect(new Date(clockMs).toISOString()).toBe('2026-01-15T00:40:00.000Z'); // last candle before the gap
-  });
-
-  it('returns to the live edge first and never re-resolves reviewed candles', async () => {
-    const s = new ReplaySession(setup, makeCandles(40), 6, 0, vi.fn<CandleFetcher>(async () => []), FAR_FUTURE);
+  it('Next completes the forming bar, then reveals one full bar per step', () => {
+    const s = m1Session(minutes(200), 36, 'M15');
     s.next();
+    let bars = s.getSnapshot().visibleCandles;
+    expect(bars).toHaveLength(3);
+    expect(bars[2]).toMatchObject({ close: 144 }); // completed through 00:44
+    s.next();
+    bars = s.getSnapshot().visibleCandles;
+    expect(bars.map((b) => hhmm(b.time)).at(-1)).toBe('00:45');
+    expect(bars.at(-1)).toMatchObject({ open: 145, close: 159 });
+    expect(s.getSnapshot().replay.currentIndex).toBe(59);
+  });
+
+  it('switching timeframe is instant, reveals nothing, and shows the higher bar as forming', () => {
+    const s = m1Session(minutes(200), 36, 'M1');
+    const before = s.getSnapshot().replay.currentIndex;
+    s.setTimeframe('H1');
+    const snap = s.getSnapshot();
+    expect(snap.timeframe).toBe('H1');
+    expect(snap.replay.currentIndex).toBe(before);
+    expect(snap.visibleCandles).toHaveLength(1);
+    expect(snap.visibleCandles[0]).toMatchObject({ open: 100, high: 136, close: 136 }); // forming 00:00 H1 bar
+    // Never contains a minute that has not been revealed.
+    expect(snap.visibleCandles.at(-1)!.high).toBeLessThanOrEqual(136);
+  });
+
+  it('Previous steps back exactly one chart bar', () => {
+    const s = m1Session(minutes(200), 59, 'M15'); // through 00:59
     s.previous();
-    s.previous();
-    await s.alignClockTo(900); // M15
-    expect(s.getSnapshot().replay.atLiveEdge).toBe(true);
-    expect(new Date(s.clockMs()).toISOString()).toBe('2026-01-15T00:45:00.000Z');
+    expect(s.getSnapshot().visibleCandles.at(-1)!.time).toBe(T0 + 30 * 60);
+    expect(s.getSnapshot().replay.currentIndex).toBe(44);
+    expect(s.getSnapshot().replay.atLiveEdge).toBe(false);
+  });
+
+  it('resolves SL/TP minute by minute even on a higher timeframe', () => {
+    // A 15m bar whose range covers both SL and TP: on 1-minute data the order is known (TP first).
+    const s = m1Session(minutes(200, { 40: { high: 160 }, 42: { low: 50 } }), 36, 'M15');
+    s.placeOrder({ side: 'LONG', stopLoss: 90, takeProfit: 150, riskPercent: 1 }); // entry 136
+    s.next();
+    const trade = s.getSnapshot().trades[0];
+    expect(trade).toMatchObject({ exitReason: 'TAKE_PROFIT', ambiguousExit: false });
+    expect(hhmm(trade.exitCandleTime!)).toBe('00:40');
+  });
+
+  it('market orders fill at the close of the latest minute, timestamped at its close', () => {
+    const s = m1Session(minutes(200), 36, 'H1');
+    const result = s.placeOrder({ side: 'LONG', stopLoss: 120, takeProfit: 160, riskPercent: 1 });
+    expect(result.ok && result.trade).toMatchObject({ entryPrice: 136, entryTime: '2026-01-15T00:37:00Z' });
+  });
+
+  it('reports time replayed since the start', () => {
+    const s = m1Session(minutes(200), 36, 'M15');
+    s.next();
+    s.next();
+    expect(s.getSnapshot().elapsedMs).toBe((59 - 36) * 60_000);
   });
 });

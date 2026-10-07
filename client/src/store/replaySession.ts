@@ -1,9 +1,12 @@
 import {
-  DATA_WINDOWS,
+  AHEAD_MS,
+  BASE_GRANULARITY,
+  BASE_SECONDS,
   MAX_EMPTY_FORWARD_FETCHES,
   PREFETCH_RETRY_BACKOFF_MS,
-  PREFETCH_THRESHOLD_CANDLES,
+  prefetchThreshold,
 } from '../replay/dataWindow';
+import { aggregateCandles } from '../utils/aggregate';
 import { ReplayEngine, type ReplaySpeed, type ReplayState } from '../replay/replayEngine';
 import { ReplayPlayer } from '../replay/replayPlayer';
 import { computeStats, type AccountStats } from '../trading/statistics';
@@ -18,10 +21,21 @@ export type CandleFetcher = (instrument: string, granularity: Granularity, fromM
 export type PlaybackStatus = 'playing' | 'paused';
 
 export interface ReplaySnapshot {
+  /** Engine state, in 1-minute candles */
   replay: ReplayState & { status: PlaybackStatus };
-  /** Candles revealed so far — the only market data the UI ever receives. */
+  /** Chart timeframe; the replay itself always runs on 1-minute candles. */
+  timeframe: Granularity;
+  /**
+   * Revealed data aggregated to the chart timeframe — the only market data the UI receives.
+   * The last bar may still be forming (e.g. a 1h bar 25 minutes into the hour).
+   */
   visibleCandles: readonly Candle[];
+  /** Latest (possibly forming) bar of the chart timeframe */
   currentCandle: Candle;
+  /** Replay clock (ms): close time of the latest revealed minute */
+  clockMs: number;
+  /** Time replayed since the start (ms) */
+  elapsedMs: number;
   loadingMore: boolean;
   /** No more historical data exists after the loaded range. */
   dataExhausted: boolean;
@@ -50,6 +64,10 @@ const MAX_EVENTS = 10;
 /**
  * Coordinates the replay engine, the playback timer and forward-data prefetching,
  * and publishes immutable snapshots for the UI. Contains no React code.
+ *
+ * The engine runs on 1-minute candles. The chart timeframe is a view: Next/Previous move one bar of
+ * it, trades are resolved on every minute, and changing timeframe is instant — the current bar of the
+ * new timeframe simply shows as forming, built only from minutes already revealed.
  */
 export class ReplaySession {
   readonly setup: SessionSetup;
@@ -65,14 +83,15 @@ export class ReplaySession {
   #error: string | null = null;
   /** Automatic prefetch retries are suppressed until this time after a failure. */
   #retryAfterMs = 0;
-  /** Settles when the in-flight forward fetch finishes (null when idle). */
-  #prefetchPromise: Promise<void> | null = null;
   #disposed = false;
   #playing = false;
   #runId = 0;
   #account: TradingAccount;
   #events: TradeEvent[] = [];
   #nextEventId = 1;
+  #timeframe: Granularity;
+  readonly #startClockMs: number;
+  #aggregated: { source: readonly Candle[]; timeframe: Granularity; bars: readonly Candle[] } | null = null;
   #snapshot: ReplaySnapshot;
 
   constructor(
@@ -87,6 +106,8 @@ export class ReplaySession {
     this.setup = setup;
     this.#account = account ?? this.#newAccount();
     this.#engine = new ReplayEngine(candles, startIndex);
+    this.#timeframe = setup.granularity;
+    this.#startClockMs = this.clockMs();
     this.#player = new ReplayPlayer(() => this.#tick(), () => this.#engine.getIntervalMs());
     this.#fetchCandles = fetchCandles;
     this.#loadedUntilMs = loadedUntilMs;
@@ -106,9 +127,10 @@ export class ReplaySession {
 
   // ---- replay controls ----
 
+  /** Reveals one bar of the chart timeframe (completing the forming bar first). */
   next(): void {
     this.pause();
-    if (this.#step()) {
+    if (this.#stepBar()) {
       this.#emit();
     } else {
       // At the end of the loaded data: an explicit Next retries loading more right away.
@@ -116,9 +138,26 @@ export class ReplaySession {
     }
   }
 
+  /** Steps back one bar of the chart timeframe, for review (trading resumes at the live edge). */
   previous(): void {
     this.pause();
-    if (this.#engine.previous()) this.#emit();
+    const seconds = this.#timeframeSeconds();
+    const barStart = Math.floor(this.#engine.getCurrentCandle().time / seconds) * seconds;
+    let moved = false;
+    while (this.#engine.getCurrentCandle().time >= barStart && this.#engine.previous()) moved = true;
+    if (moved) this.#emit();
+  }
+
+  get timeframe(): Granularity {
+    return this.#timeframe;
+  }
+
+  /** Changes the chart timeframe instantly. Nothing new is revealed; the current bar may show as forming. */
+  setTimeframe(timeframe: Granularity): void {
+    if (timeframe === this.#timeframe) return;
+    this.#timeframe = timeframe;
+    this.#maybePrefetch();
+    this.#emit();
   }
 
   play(): void {
@@ -139,39 +178,9 @@ export class ReplaySession {
     this.#emit();
   }
 
-  /** Replay clock: close time (ms) of the latest revealed candle — everything before it has "happened". */
+  /** Replay clock: close time (ms) of the latest revealed minute — everything before it has "happened". */
   clockMs(): number {
-    return (this.#engine.getLiveEdgeCandle().time + GRANULARITY_SECONDS[this.setup.granularity]) * 1000;
-  }
-
-  /**
-   * Prepares a switch to a timeframe of `barSeconds`: returns to the live edge, then keeps revealing
-   * candles (resolving trades on each, exactly like Next) until the clock reaches the next bar boundary
-   * of the new timeframe. That way the new timeframe never shows a bar that is partly in the future,
-   * and open trades are never resolved against prices from before their fill. Stops early at gaps
-   * (weekends) and at the true end of the data.
-   */
-  async alignClockTo(barSeconds: number): Promise<{ clockMs: number; advancedBars: number }> {
-    this.pause();
-    while (!this.#engine.getState().atLiveEdge && this.#engine.next()) {
-      // Re-showing already revealed candles: nothing to resolve.
-    }
-    const targetSec = Math.ceil(this.clockMs() / 1000 / barSeconds) * barSeconds;
-    let advancedBars = 0;
-    while (this.clockMs() / 1000 < targetSec && !this.#disposed) {
-      if (this.#engine.hasNext()) {
-        if (!this.#engine.nextCandleOpensBefore(targetSec)) break; // gap: the bar is already complete
-        this.#step();
-        advancedBars += 1;
-        continue;
-      }
-      if (!this.#loadingMore) this.#maybePrefetch(true);
-      if (!this.#prefetchPromise || !this.#loadingMore) break; // end of data
-      await this.#prefetchPromise;
-      if (this.#error) break;
-    }
-    this.#emit();
-    return { clockMs: this.clockMs(), advancedBars };
+    return (this.#engine.getLiveEdgeCandle().time + BASE_SECONDS) * 1000;
   }
 
   /** Retries loading forward data immediately (e.g. after a network or rate-limit error). */
@@ -257,7 +266,7 @@ export class ReplaySession {
   /** Market orders fill at the close of the latest revealed candle — nothing later is known. */
   #quote(): MarketQuote {
     const candle = this.#engine.getCurrentCandle();
-    const closeTimeMs = (candle.time + GRANULARITY_SECONDS[this.setup.granularity]) * 1000;
+    const closeTimeMs = (candle.time + BASE_SECONDS) * 1000;
     return { price: candle.close, time: new Date(closeTimeMs).toISOString().replace('.000Z', 'Z'), candleTime: candle.time };
   }
 
@@ -275,10 +284,26 @@ export class ReplaySession {
     return result !== null;
   }
 
-  /** One playback tick. While more data is being fetched at the end of the buffer, playback waits. */
+  #timeframeSeconds(): number {
+    return GRANULARITY_SECONDS[this.#timeframe];
+  }
+
+  /**
+   * Reveals minutes up to the end of the chart-timeframe bar the next minute belongs to. Stops early at
+   * the end of the loaded data (the bar then stays forming and the next step completes it).
+   */
+  #stepBar(): boolean {
+    if (!this.#step()) return false;
+    const seconds = this.#timeframeSeconds();
+    const barEnd = Math.floor(this.#engine.getCurrentCandle().time / seconds) * seconds + seconds;
+    while (this.#engine.nextCandleOpensBefore(barEnd)) this.#step();
+    return true;
+  }
+
+  /** One playback tick (one chart bar). While more data is being fetched at the end, playback waits. */
   #tick(): boolean {
     if (this.#engine.hasNext()) {
-      this.#step();
+      this.#stepBar();
     } else if (!this.#loadingMore) {
       this.#playing = false;
     }
@@ -289,18 +314,18 @@ export class ReplaySession {
   /** Fetches the next forward window when the buffer runs low. `force` skips the post-error backoff. */
   #maybePrefetch(force = false): void {
     if (this.#loadingMore || this.#dataExhausted || this.#disposed) return;
-    if (this.#engine.bufferedAhead() >= PREFETCH_THRESHOLD_CANDLES) return;
+    if (this.#engine.bufferedAhead() >= prefetchThreshold(this.#timeframeSeconds())) return;
     if (!force && this.#now() < this.#retryAfterMs) return;
 
     const fromMs = this.#loadedUntilMs;
-    const toMs = Math.min(fromMs + DATA_WINDOWS[this.setup.granularity].aheadMs, this.#now());
+    const toMs = Math.min(fromMs + AHEAD_MS, this.#now());
     if (toMs <= fromMs) {
       this.#dataExhausted = true;
       return;
     }
 
     this.#loadingMore = true;
-    this.#prefetchPromise = this.#fetchCandles(this.setup.instrument, this.setup.granularity, fromMs, toMs)
+    this.#fetchCandles(this.setup.instrument, BASE_GRANULARITY, fromMs, toMs)
       .then((candles) => {
         if (this.#disposed) return;
         this.#loadedUntilMs = toMs;
@@ -321,7 +346,6 @@ export class ReplaySession {
       .finally(() => {
         if (this.#disposed) return;
         this.#loadingMore = false;
-        this.#prefetchPromise = null;
         if (this.#error === null) this.#maybePrefetch();
         this.#emit();
       });
@@ -334,14 +358,29 @@ export class ReplaySession {
     for (const listener of this.#listeners) listener();
   }
 
+  /** Revealed minutes aggregated to the chart timeframe (recomputed only when either changes). */
+  #displayBars(): readonly Candle[] {
+    const source = this.#engine.getVisibleCandles();
+    const cached = this.#aggregated;
+    if (cached && cached.source === source && cached.timeframe === this.#timeframe) return cached.bars;
+    const bars =
+      this.#timeframe === BASE_GRANULARITY ? source : Object.freeze(aggregateCandles(source, this.#timeframeSeconds()));
+    this.#aggregated = { source, timeframe: this.#timeframe, bars };
+    return bars;
+  }
+
   #buildSnapshot(): ReplaySnapshot {
     const replay = this.#engine.getState();
-    const currentCandle = this.#engine.getCurrentCandle();
+    const bars = this.#displayBars();
     const trades = this.#account.getTrades();
+    const clockMs = (this.#engine.getCurrentCandle().time + BASE_SECONDS) * 1000;
     return {
       replay: { ...replay, status: this.#playing ? 'playing' : 'paused' },
-      visibleCandles: this.#engine.getVisibleCandles(),
-      currentCandle,
+      timeframe: this.#timeframe,
+      visibleCandles: bars,
+      currentCandle: bars[bars.length - 1],
+      clockMs,
+      elapsedMs: Math.max(0, this.clockMs() - this.#startClockMs),
       loadingMore: this.#loadingMore,
       dataExhausted: this.#dataExhausted && !this.#engine.hasNext(),
       canAdvance: this.#engine.hasNext() || !this.#dataExhausted,

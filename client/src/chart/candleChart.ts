@@ -149,15 +149,20 @@ export class CandleChart {
   }
 
   /**
-   * Renders the revealed candles. Appending exactly one candle uses an incremental update so the
-   * user's zoom/pan is preserved during playback; anything else (step back, reset) redraws.
+   * Renders the revealed bars. Playback only ever changes the tail — the forming bar grows, or a new bar
+   * starts — so those cases use incremental updates that preserve the user's zoom/pan; anything else
+   * (step back, reset, timeframe change) redraws.
    */
   setCandles(candles: readonly Candle[]): void {
-    const last = candles[candles.length - 1];
-    const isSingleAppend =
-      last !== undefined && candles.length === this.#count + 1 && this.#lastTime !== null && last.time > this.#lastTime;
+    const n = candles.length;
+    const last = candles[n - 1];
+    const sameTail = last !== undefined && n === this.#count && last.time === this.#lastTime;
+    const oneMore = last !== undefined && n === this.#count + 1 && this.#lastTime !== null && candles[n - 2]?.time === this.#lastTime;
 
-    if (isSingleAppend) {
+    if (sameTail) {
+      this.#series.update(this.#toBar(last)); // forming bar changed
+    } else if (oneMore) {
+      this.#series.update(this.#toBar(candles[n - 2])); // previous bar may have completed
       this.#series.update(this.#toBar(last));
     } else {
       this.#series.setData(candles.map((c) => this.#toBar(c)));

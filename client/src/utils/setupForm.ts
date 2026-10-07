@@ -93,7 +93,6 @@ export function validateSetup(
       instrument: values.instrument,
       granularity: values.granularity,
       startMs,
-      runStartMs: startMs,
       startingBalance: balance,
       riskPercent: risk,
       sameCandleRule: values.sameCandleRule,

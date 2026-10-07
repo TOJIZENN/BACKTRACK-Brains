@@ -31,3 +31,15 @@ export function formatQuantity(value: number, precision: number): string {
 }
 
 export { formatDateTime, formatShortDateTime } from './timezone';
+
+/** "2d 3h 05m", "3h 05m", "45m" */
+export function formatDuration(ms: number): string {
+  const totalMinutes = Math.max(0, Math.floor(ms / 60_000));
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  const mm = String(minutes).padStart(2, '0');
+  if (days > 0) return `${days}d ${hours}h ${mm}m`;
+  if (hours > 0) return `${hours}h ${mm}m`;
+  return `${minutes}m`;
+}

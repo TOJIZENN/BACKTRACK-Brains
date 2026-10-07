@@ -6,7 +6,7 @@ import { DrawingStyleBar } from '../components/DrawingStyleBar';
 import { DrawingToolbar } from '../components/DrawingToolbar';
 import { useChartSettings } from '../hooks/useChartSettings';
 import { usePanelLayout } from '../hooks/usePanelLayout';
-import { GRANULARITY_SECONDS, type Granularity } from '../types/market';
+import { GRANULARITY_SECONDS } from '../types/market';
 import { TimeframeSwitcher } from '../components/TimeframeSwitcher';
 import { BottomPanel } from '../components/BottomPanel';
 import { CandleChartView } from '../components/CandleChartView';
@@ -38,19 +38,14 @@ interface Props {
   drawings: Drawing[];
   onDrawingsChange: (drawings: Drawing[]) => void;
   onJump: (startMs: number) => void;
-  onSwitchTimeframe: (granularity: Granularity) => void;
-  /** Reloads the original start of the run (used by Reset after a timeframe switch). */
-  onRestart: () => void;
   loading: boolean;
   loadError: string | null;
-  notice: string | null;
-  onDismissNotice: () => void;
   onDismissLoadError: () => void;
 }
 
 export function ReplayPage(props: Props) {
-  const { session, drawings, onDrawingsChange: setDrawings, onExit, onJump, onSwitchTimeframe, onRestart } = props;
-  const { loading: jumping, loadError: jumpError, onDismissLoadError: onDismissJumpError, notice, onDismissNotice } = props;
+  const { session, drawings, onDrawingsChange: setDrawings, onExit, onJump } = props;
+  const { loading: jumping, loadError: jumpError, onDismissLoadError: onDismissJumpError } = props;
   const snapshot = useReplaySnapshot(session);
   const ticket = useOrderTicket(session);
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -73,12 +68,11 @@ export function ReplayPage(props: Props) {
     () => [...openTradeLines(trades), ...draftLines(ticket.order.stopLoss, ticket.order.takeProfit)],
     [trades, ticket.order.stopLoss, ticket.order.takeProfit],
   );
-  const markers = useMemo(() => tradeMarkers(trades, snapshot.visibleCandles, GRANULARITY_SECONDS[setup.granularity]), [trades, snapshot.visibleCandles, setup.granularity]);
+  const markers = useMemo(() => tradeMarkers(trades, snapshot.visibleCandles, GRANULARITY_SECONDS[snapshot.timeframe]), [trades, snapshot.visibleCandles, snapshot.timeframe]);
 
   const closeDialog = useCallback(() => setDialog(null), []);
 
-  // After a timeframe switch the session starts mid-run, so Reset reloads the run's original start.
-  const doReset = () => (setup.runStartMs === setup.startMs ? session.reset() : onRestart());
+  const doReset = () => session.reset();
 
   const requestReset = () => {
     if (hasTrades) {
@@ -122,7 +116,7 @@ export function ReplayPage(props: Props) {
       <header className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-terminal-border bg-terminal-panel px-4 py-2">
         <span className="font-bold tracking-wide text-terminal-text">BACK<span className="text-accent">TRACK</span></span>
         <span className="font-mono text-sm">{instrument.displayName}</span>
-        <TimeframeSwitcher value={setup.granularity} onChange={onSwitchTimeframe} disabled={jumping} />
+        <TimeframeSwitcher value={snapshot.timeframe} onChange={(g) => session.setTimeframe(g)} disabled={jumping} />
         <span
           className="rounded border border-warn/50 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-warn"
           title="Historical replay only. No orders are sent to any broker or data provider."
@@ -151,16 +145,6 @@ export function ReplayPage(props: Props) {
         </div>
       </header>
 
-      {notice && (
-        <div className="px-4 pt-2">
-          <div role="status" className="flex items-start gap-3 rounded-md border border-accent/40 bg-accent/10 px-3 py-1.5 text-sm" data-testid="notice">
-            <span className="flex-1">{notice}</span>
-            <button type="button" onClick={onDismissNotice} aria-label="Dismiss" className="text-terminal-muted hover:text-terminal-text">
-              ✕
-            </button>
-          </div>
-        </div>
-      )}
       {(snapshot.error || jumpError) && (
         <div className="flex flex-col gap-2 px-4 pt-2">
           {snapshot.error && (
@@ -181,11 +165,11 @@ export function ReplayPage(props: Props) {
             candles={snapshot.visibleCandles}
             pricePrecision={instrument.pricePrecision}
             timeZone={setup.timeZone}
-            barSeconds={GRANULARITY_SECONDS[setup.granularity]}
+            barSeconds={GRANULARITY_SECONDS[snapshot.timeframe]}
             settings={chartSettings}
             priceLines={priceLines}
             markers={markers}
-            focusKey={snapshot.runId}
+            focusKey={`${snapshot.runId}-${snapshot.timeframe}`}
             tool={tool}
             drawings={drawings}
             onToolChange={setTool}
