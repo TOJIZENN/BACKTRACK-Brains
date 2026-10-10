@@ -6,6 +6,7 @@ Automated strategy tests that run outside the replay app, on CSV candle files.
 |---|---|
 | `fetch_dukascopy.py` | Downloads XAU/USD 1-minute candles (mid of bid/ask, UTC) from Dukascopy's free API into a CSV. Resumable: each day is cached next to the output. |
 | `vp_backtest.py` | Backtests the three setups of the *Volume Profile Trading Blueprint* (POC bounce, value-area reversal, breakout) and writes trade lists. |
+| `smc_backtest.py` | Backtests an ICT / smart-money setup: 1h market structure shift (MSS), then an order-block tap, 1:2 risk-reward, with four readings of the rules. See [MSS + order block](#mss--order-block). |
 | `kronos_eval.py` | Tests whether the open-source [Kronos](https://github.com/shiyu-coder/Kronos) candlestick model's forecasts carry an edge: trading its forecast direction, and using it as a filter on another backtest's trades. See [Kronos](#kronos). |
 
 ```bash
@@ -48,6 +49,30 @@ The blueprint leaves room for judgment; these are the exact definitions.
 
 No edge after costs. 1R/1.5R/3R targets and a TP-first fill rule didn't change that; the 1h chart was
 slightly positive (+0.03 to +0.06R) but within noise.
+
+## MSS + order block
+
+Request: "1h MSS and order block tap, take the trade on 30m, aim for 1:2". `smc_backtest.py`'s docstring
+has the exact rules. In short: swings are 3-bar fractals, used only once confirmed; an MSS is a candle
+closing through the latest swing against the current trend; the order block is the last opposite-colour
+candle of the leg that caused it; the stop goes beyond the OB/leg extreme, the target at 2R.
+
+| Config | Entry | Trades | Win rate | Avg R after costs | 2020–25 avg R |
+|---|---|---|---|---|---|
+| A | 1h MSS + OB, limit order at the OB | 1,573 | 34.5% | +0.006 | +0.044 |
+| B | same, all on 30m | 3,108 | 32.8% | −0.063 | −0.161 |
+| C | 1h MSS + OB, 30m tap, then a 30m break | 910 | 35.5% | +0.042 | −0.039 |
+| D | as C, but the 30m break must be a real 30m MSS | 616 | 33.1% | −0.027 | −0.088 |
+
+Jun 2004 – Oct 2025 broker data, swing length 3, costs 0.01% of price, stops/targets on 15m candles.
+None of A, C or D is distinguishable from zero (t between −0.5 and +0.9); B loses reliably (t −2.5).
+Swing lengths 2 and 5 give the same picture. At 0.03% costs every configuration is negative.
+
+An independent audit (four agents, then one skeptic per finding) found no lookahead: a separate
+reimplementation matched every trade, and scrambling all not-yet-closed candles changed no earlier
+trade. It did find two execution bugs that made A and B look worse (stale order fills while another
+trade was open, and fills at the limit price on gap opens) and that C's 30m trigger was often a
+with-trend break; the table above includes those fixes and D as the strict reading.
 
 ## Kronos
 
