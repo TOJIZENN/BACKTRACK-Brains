@@ -6,6 +6,7 @@ Automated strategy tests that run outside the replay app, on CSV candle files.
 |---|---|
 | `fetch_dukascopy.py` | Downloads XAU/USD 1-minute candles (mid of bid/ask, UTC) from Dukascopy's free API into a CSV. Resumable: each day is cached next to the output. |
 | `vp_backtest.py` | Backtests the three setups of the *Volume Profile Trading Blueprint* (POC bounce, value-area reversal, breakout) and writes trade lists. |
+| `kronos_eval.py` | Tests whether the open-source [Kronos](https://github.com/shiyu-coder/Kronos) candlestick model's forecasts carry an edge: trading its forecast direction, and using it as a filter on another backtest's trades. See [Kronos](#kronos). |
 
 ```bash
 pip install pandas numpy
@@ -47,6 +48,33 @@ The blueprint leaves room for judgment; these are the exact definitions.
 
 No edge after costs. 1R/1.5R/3R targets and a TP-first fill rule didn't change that; the 1h chart was
 slightly positive (+0.03 to +0.06R) but within noise.
+
+## Kronos
+
+[Kronos](https://github.com/shiyu-coder/Kronos) (MIT, AAAI 2026) is a foundation model pre-trained on
+candlesticks from 45+ exchanges. Its weights are on Hugging Face, so the machine running the test needs
+access to `huggingface.co` (in a Claude Code cloud environment, allow it under Network access).
+
+```bash
+git clone https://github.com/shiyu-coder/Kronos
+pip install torch einops safetensors huggingface_hub pandas numpy tqdm
+# 1. Trade Kronos's 24-hour forecast direction once a day on 1h candles
+python backtests/kronos_eval.py --kronos-dir Kronos --csv data/XAU_1h.csv --out results/kronos_dir_1h.csv
+# 2. Keep another backtest's trades only when Kronos agrees with them
+python backtests/kronos_eval.py --kronos-dir Kronos --csv data/XAU_1h.csv --trades results/trades.csv --out results/kronos_filter.csv
+```
+
+- **No lookahead:** every forecast uses only candles up to the decision candle; trades enter at the
+  next candle's open.
+- **Training-data overlap:** Kronos was published in August 2025 and its training data may contain any
+  earlier market history, gold included. Results before `--clean-from` (default 2025-08-01) can look
+  better than they really are; only results after it are a genuine out-of-sample test. That needs
+  candles after August 2025, e.g. from `fetch_dukascopy.py`.
+- **Baselines:** each Kronos trade is compared with always-long and momentum trades that use identical
+  entry, stop and target rules, so gold's long uptrend isn't mistaken for skill.
+- **Speed:** every forecast runs the model once per future candle, so long runs are slow on CPU. Use
+  `--start`, `--every` or a GPU to shorten them. Runs resume where they stopped.
+- `--random-weights` swaps in a tiny untrained model to test the script without downloading anything.
 
 ## Next steps
 
