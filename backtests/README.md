@@ -72,8 +72,10 @@ python backtests/kronos_eval.py --kronos-dir Kronos --csv data/XAU_1h.csv --trad
   candles after August 2025, e.g. from `fetch_dukascopy.py`.
 - **Baselines:** each Kronos trade is compared with always-long and momentum trades that use identical
   entry, stop and target rules, so gold's long uptrend isn't mistaken for skill.
-- **Speed:** every forecast runs the model once per future candle, so long runs are slow on CPU. Use
-  `--start`, `--every` or a GPU to shorten them. Runs resume where they stopped.
+- **Speed:** a stand-in with Kronos-small's size (24.7M parameters) took about 15 s per forecast on a
+  4-core CPU (400-candle context, 24 candles ahead, 5 sample paths). One forecast a day is then about
+  75 min per year of data; the filter test on ~900 trades about 4 hours. Fewer `--samples`, a shorter
+  `--horizon`, `--model mini` or a GPU cut that sharply. Runs resume where they stopped.
 - `--random-weights` swaps in a tiny untrained model to test the script without downloading anything.
 
 ## Next steps

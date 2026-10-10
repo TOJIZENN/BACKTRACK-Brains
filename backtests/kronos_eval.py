@@ -189,7 +189,7 @@ def main():
     ap.add_argument('--csv', required=True, help='Date;Open;High;Low;Close;Volume candles (any timeframe)')
     ap.add_argument('--out', required=True, help='output CSV (appended and resumed in the direction test)')
     ap.add_argument('--kronos-dir', default='Kronos', help='path to a clone of shiyu-coder/Kronos')
-    ap.add_argument('--model', choices=MODELS, default='small')
+    ap.add_argument('--model', choices=list(MODELS), default='small')
     ap.add_argument('--lookback', type=int, default=400)
     ap.add_argument('--horizon', type=int, default=24)
     ap.add_argument('--every', type=int, default=24, help='bars between decision points')
@@ -207,6 +207,8 @@ def main():
     ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--random-weights', action='store_true', help='tiny untrained model, to test the mechanics offline')
     args = ap.parse_args()
+    if args.random_weights:
+        args.model = 'random-weights stand-in'
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     d = load_csv(args.csv)
     pred = load_predictor(args)
