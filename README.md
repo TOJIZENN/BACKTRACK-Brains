@@ -415,6 +415,12 @@ R multiple    = P&L ÷ risk amount                                (+$200 → +2R
 
 Shortcuts are ignored while typing in an input. Press Esc first.
 
+## Automated Backtests
+
+`backtests/` holds Python scripts that test a strategy over years of candles without the replay app:
+a Dukascopy 1-minute downloader and a backtest of the Volume Profile Trading Blueprint setups.
+See [backtests/README.md](backtests/README.md).
+
 ## Limitations
 
 - **Single price feed (no bid/ask), no spread, commission, swap or slippage.** Results are optimistic compared with real

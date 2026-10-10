@@ -16,3 +16,8 @@ server/cache/
 .vscode/
 .idea/
 *.log
+
+# Backtest data and outputs
+data/
+results/
+*.cache/
